@@ -20,16 +20,26 @@ cloud.
 2. Optionally adjust the **refresh interval** (how often the state is polled).
 3. Save. Use **Test the connection** to confirm your credentials.
 
-## Adding your air conditioners
+## Adding your devices
 
-Run a device discovery: every air-to-air unit on your account appears with four
-features — **Power**, **Mode** (heat / cool / dry / fan / auto), **Target
-temperature** and a read-only **Room temperature**. Create the ones you want to
-control.
+Run a device discovery: every unit on your account appears, ready to create.
+
+- **Air-to-air units (air conditioners)** expose four features — **Power**,
+  **Mode** (heat / cool / dry / fan / auto), **Target temperature** and a
+  read-only **Room temperature**.
+- **Air-to-water units (Ecodan heat pumps)** expose **Power**, a **Zone 1
+  temperature** setpoint and read-only **Zone 1 room temperature**, an
+  **Outdoor temperature** sensor, and — when a hot water tank is present —
+  **Hot water temperature** (setpoint), a read-only **Hot water tank
+  temperature** and a **Forced hot water** switch.
+
+Create the ones you want to control.
 
 ## Notes
 
-- Only air-to-air units (air conditioners) are supported for now. Air-to-water
-  heat pumps and ERV ventilation units are ignored.
+- Air-to-air (air conditioners) and air-to-water (Ecodan heat pumps) units are
+  supported. ERV ventilation units are ignored.
+- Zone operation mode (heating curve, flow vs room thermostat) is not
+  controllable yet on air-to-water units.
 - The connection status is shown on this screen; if it reports a login failure,
   re-check your email and password.

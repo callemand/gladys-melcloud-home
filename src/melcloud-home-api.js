@@ -4,8 +4,7 @@
 // Wraps the OAuth token lifecycle and the backend-for-frontend (BFF) calls:
 //   - GET  /context               -> buildings + air-to-air / air-to-water units
 //   - PUT  /monitor/ataunit/{id}   -> command an air-to-air unit
-//
-// Only air-to-air units (air conditioners) are exposed for now.
+//   - PUT  /monitor/atwunit/{id}   -> command an air-to-water unit
 // -----------------------------------------------------------------------------
 
 import axios from 'axios';
@@ -99,19 +98,54 @@ export class MELCloudHomeApi {
   }
 
   /**
-   * List all air-to-air units, each annotated with its buildingId.
-   * @returns {Promise<Array>} Air-to-air units.
+   * List, across all buildings, the units stored under a given key, each
+   * annotated with its buildingId.
+   * @param {string} unitsKey - Building property holding the units array.
+   * @returns {Promise<Array>} The units.
    */
-  async listAtaUnits() {
+  async listUnits(unitsKey) {
     const context = await this.getContext();
     const buildings = [...(context.buildings || []), ...(context.guestBuildings || [])];
     const units = [];
     buildings.forEach((building) => {
-      (building.airToAirUnits || []).forEach((unit) => {
+      (building[unitsKey] || []).forEach((unit) => {
         units.push({ ...unit, buildingId: building.id });
       });
     });
     return units;
+  }
+
+  /**
+   * List all air-to-air units, each annotated with its buildingId.
+   * @returns {Promise<Array>} Air-to-air units.
+   */
+  async listAtaUnits() {
+    return this.listUnits('airToAirUnits');
+  }
+
+  /**
+   * List all air-to-water units, each annotated with its buildingId.
+   * @returns {Promise<Array>} Air-to-water units.
+   */
+  async listAtwUnits() {
+    return this.listUnits('airToWaterUnits');
+  }
+
+  /**
+   * PUT a command payload to a unit under a given monitor path.
+   * @param {string} monitorPath - e.g. "ataunit" or "atwunit".
+   * @param {string} unitId - The unit id.
+   * @param {object} payload - The full command payload.
+   * @returns {Promise<void>} Nothing.
+   */
+  async setUnit(monitorPath, unitId, payload) {
+    const accessToken = await this.getAccessToken();
+    await this.client.put(`${API_ENDPOINT}/monitor/${monitorPath}/${unitId}`, payload, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
   }
 
   /**
@@ -121,12 +155,16 @@ export class MELCloudHomeApi {
    * @returns {Promise<void>} Nothing.
    */
   async setAtaUnit(unitId, payload) {
-    const accessToken = await this.getAccessToken();
-    await this.client.put(`${API_ENDPOINT}/monitor/ataunit/${unitId}`, payload, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-    });
+    return this.setUnit('ataunit', unitId, payload);
+  }
+
+  /**
+   * Send a full command payload to an air-to-water unit.
+   * @param {string} unitId - The unit id.
+   * @param {object} payload - The full command payload.
+   * @returns {Promise<void>} Nothing.
+   */
+  async setAtwUnit(unitId, payload) {
+    return this.setUnit('atwunit', unitId, payload);
   }
 }

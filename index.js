@@ -15,14 +15,43 @@
 import { GladysIntegration, logger } from '@gladysassistant/integration-sdk';
 import { normalizeConfig } from './src/config.js';
 import { MELCloudHomeApi } from './src/melcloud-home-api.js';
-import {
-  buildDevice,
-  readStates,
-  buildSetPayload,
-  findUnitByExternalId,
-} from './src/devices/airToAir.js';
+import * as airToAir from './src/devices/airToAir.js';
+import * as airToWater from './src/devices/airToWater.js';
 
 const gladys = new GladysIntegration();
+
+// Supported device families. Each entry pairs a device module (discovery/state/
+// command mapping) with the API calls that list and command that family.
+const DEVICE_FAMILIES = [
+  {
+    module: airToAir,
+    label: 'air conditioner',
+    list: (client) => client.listAtaUnits(),
+    set: (client, unitId, payload) => client.setAtaUnit(unitId, payload),
+  },
+  {
+    module: airToWater,
+    label: 'heat pump',
+    list: (client) => client.listAtwUnits(),
+    set: (client, unitId, payload) => client.setAtwUnit(unitId, payload),
+  },
+];
+
+/**
+ * Resolve the device family, unit and API list for a Gladys device.
+ * @param {object} device - The Gladys device (has external_id).
+ * @returns {Promise<{family: object, unit: object, units: Array}|null>} Match or null.
+ */
+async function resolveDevice(device) {
+  for (const family of DEVICE_FAMILIES) {
+    const units = await family.list(api);
+    const unit = family.module.findUnitByExternalId(gladys, units, device.external_id);
+    if (unit) {
+      return { family, unit, units };
+    }
+  }
+  return null;
+}
 
 let config = normalizeConfig();
 let api = null;
@@ -69,9 +98,13 @@ gladys.onScanRequest(async () => {
   if (!api) {
     throw new Error('MELCloud Home is not configured');
   }
-  const units = await api.listAtaUnits();
-  logger.info(`Discovered ${units.length} MELCloud Home air conditioner(s)`);
-  await gladys.publishDiscoveredDevices(units.map((unit) => buildDevice(gladys, unit, config)));
+  const devices = [];
+  for (const family of DEVICE_FAMILIES) {
+    const units = await family.list(api);
+    logger.info(`Discovered ${units.length} MELCloud Home ${family.label}(s)`);
+    units.forEach((unit) => devices.push(family.module.buildDevice(gladys, unit, config)));
+  }
+  await gladys.publishDiscoveredDevices(devices);
 });
 
 // --- Command -----------------------------------------------------------------
@@ -79,16 +112,20 @@ gladys.onSetValue(async (device, feature, value) => {
   if (!api) {
     throw new Error('MELCloud Home is not configured');
   }
-  const units = await api.listAtaUnits();
-  const unit = findUnitByExternalId(gladys, units, device.external_id);
-  if (!unit) {
+  const match = await resolveDevice(device);
+  if (!match) {
     throw new Error(`MELCloud Home unit not found for ${device.external_id}`);
   }
-  const payload = buildSetPayload(gladys, unit, feature.external_id, value);
+  const payload = match.family.module.buildSetPayload(
+    gladys,
+    match.unit,
+    feature.external_id,
+    value,
+  );
   if (!payload) {
     throw new Error(`MELCloud Home feature is not writable: ${feature.external_id}`);
   }
-  await api.setAtaUnit(unit.id, payload);
+  await match.family.set(api, match.unit.id, payload);
   await gladys.publishState(feature.external_id, value);
 });
 
@@ -97,12 +134,11 @@ gladys.onPoll(async (device) => {
   if (!api) {
     return;
   }
-  const units = await api.listAtaUnits();
-  const unit = findUnitByExternalId(gladys, units, device.external_id);
-  if (!unit) {
+  const match = await resolveDevice(device);
+  if (!match) {
     return;
   }
-  await gladys.publishStates(readStates(gladys, unit));
+  await gladys.publishStates(match.family.module.readStates(gladys, match.unit));
 });
 
 // --- Config change -----------------------------------------------------------
@@ -114,10 +150,12 @@ gladys.onConfigUpdated(async () => {
 gladys.onAction('test_connection', async () => {
   try {
     const testApi = new MELCloudHomeApi({ email: config.email, password: config.password });
-    const units = await testApi.listAtaUnits();
+    const ata = await testApi.listAtaUnits();
+    const atw = await testApi.listAtwUnits();
+    const count = ata.length + atw.length;
     return {
-      en: `Connection successful: ${units.length} air conditioner(s) found.`,
-      fr: `Connexion réussie : ${units.length} climatisation(s) trouvée(s).`,
+      en: `Connection successful: ${count} device(s) found (${ata.length} AC, ${atw.length} heat pump).`,
+      fr: `Connexion réussie : ${count} appareil(s) trouvé(s) (${ata.length} clim, ${atw.length} PAC).`,
     };
   } catch (e) {
     return {
