@@ -29,7 +29,7 @@
     },
     {
       "key": "email",
-      "type": "text",
+      "type": "string",
       "label": { "en": "Email", "fr": "Email" },
       "description": {
         "en": "The email address of your MELCloud Home account.",
@@ -39,8 +39,7 @@
     },
     {
       "key": "password",
-      "type": "text",
-      "secret": true,
+      "type": "secret",
       "label": { "en": "Password", "fr": "Mot de passe" },
       "description": {
         "en": "The password of your MELCloud Home account (stored encrypted).",
