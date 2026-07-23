@@ -1,0 +1,72 @@
+{
+  "manifest_version": 1,
+  "type": "device",
+  "name": "MELCloud Home",
+  "description": {
+    "en": "Control your Mitsubishi Electric air conditioners through the MELCloud Home cloud.",
+    "fr": "Pilotez vos climatisations Mitsubishi Electric via le cloud MELCloud Home."
+  },
+  "version": "1.0.0",
+  "docker_image": "ghcr.io/callemand/gladys-melcloud-home:1.0.0",
+  "gladys_version": ">=4.62.0",
+  "cover_image": "https://raw.githubusercontent.com/callemand/gladys-melcloud-home/main/cover.png",
+  "transports": ["cloud"],
+  "config_schema": [
+    {
+      "key": "intro",
+      "type": "section",
+      "label": { "en": "MELCloud Home account", "fr": "Compte MELCloud Home" },
+      "description": {
+        "en": "MELCloud Home (melcloudhome.com) is the new Mitsubishi Electric platform, separate from the legacy MELCloud. Sign in with the same email and password you use in the MELCloud Home app.",
+        "fr": "MELCloud Home (melcloudhome.com) est la nouvelle plateforme Mitsubishi Electric, distincte de l'ancien MELCloud. Connectez-vous avec l'email et le mot de passe de l'application MELCloud Home."
+      },
+      "links": [
+        {
+          "url": "https://melcloudhome.com",
+          "label": { "en": "MELCloud Home", "fr": "MELCloud Home" }
+        }
+      ]
+    },
+    {
+      "key": "email",
+      "type": "text",
+      "label": { "en": "Email", "fr": "Email" },
+      "description": {
+        "en": "The email address of your MELCloud Home account.",
+        "fr": "L'adresse email de votre compte MELCloud Home."
+      },
+      "required": true
+    },
+    {
+      "key": "password",
+      "type": "text",
+      "secret": true,
+      "label": { "en": "Password", "fr": "Mot de passe" },
+      "description": {
+        "en": "The password of your MELCloud Home account (stored encrypted).",
+        "fr": "Le mot de passe de votre compte MELCloud Home (stocké chiffré)."
+      },
+      "required": true
+    },
+    {
+      "key": "poll_frequency",
+      "type": "number",
+      "label": { "en": "Refresh interval (s)", "fr": "Intervalle de rafraîchissement (s)" },
+      "description": {
+        "en": "How often the air conditioners state is refreshed, in seconds.",
+        "fr": "Fréquence de rafraîchissement de l'état des climatisations, en secondes."
+      },
+      "required": false,
+      "default": 60,
+      "min": 30,
+      "max": 3600
+    }
+  ],
+  "actions": [
+    {
+      "key": "test_connection",
+      "label": { "en": "Test the connection", "fr": "Tester la connexion" },
+      "timeout_seconds": 30
+    }
+  ]
+}
