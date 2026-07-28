@@ -31,6 +31,8 @@ import {
   DEVICE_FEATURE_UNITS,
 } from '@gladysassistant/integration-sdk';
 
+import { withSelectors } from './selectors.js';
+
 export const DEVICE_TYPE = 'atw';
 
 export const FEATURE = {
@@ -208,13 +210,13 @@ export function buildDevice(gladys, unit, config) {
     );
   }
 
-  return {
+  return withSelectors({
     name: unit.givenDisplayName || unit.id,
     external_id: ids.device,
     model: unit.connectedInterfaceType || undefined,
     poll_frequency: config.poll_frequency,
     features,
-  };
+  });
 }
 
 /**

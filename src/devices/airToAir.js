@@ -19,6 +19,8 @@ import {
   DEVICE_FEATURE_UNITS,
 } from '@gladysassistant/integration-sdk';
 
+import { withSelectors } from './selectors.js';
+
 export const DEVICE_TYPE = 'ata';
 
 export const FEATURE = {
@@ -110,7 +112,7 @@ function getTemperatureBounds(unit) {
 export function buildDevice(gladys, unit, config) {
   const ids = gladys.externalIds(DEVICE_TYPE, unit.id);
   const { min, max } = getTemperatureBounds(unit);
-  return {
+  return withSelectors({
     name: unit.givenDisplayName || unit.id,
     external_id: ids.device,
     // The API exposes no AC model; the Wi-Fi interface type is the only descriptor.
@@ -164,7 +166,7 @@ export function buildDevice(gladys, unit, config) {
         keep_history: true,
       },
     ],
-  };
+  });
 }
 
 /**

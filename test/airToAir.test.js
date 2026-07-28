@@ -61,6 +61,14 @@ test('buildDevice maps unit to a Gladys device with 4 features', () => {
   const temp = device.features.find((f) => f.external_id.endsWith(':temperature'));
   assert.equal(temp.min, 8);
   assert.equal(temp.max, 31);
+
+  // Explicit, globally-unique selectors (external_id without the `ext:`
+  // prefix) so features named the same across devices/integrations do not
+  // collide on the global t_device_feature.selector constraint.
+  assert.equal(device.selector, 'test:ata:unit-1');
+  device.features.forEach((f) => assert.equal(f.selector, f.external_id.replace(/^ext:/, '')));
+  const selectors = device.features.map((f) => f.selector);
+  assert.equal(new Set(selectors).size, selectors.length, 'selectors are unique');
 });
 
 test('buildDevice falls back to unit id and default bounds', () => {
