@@ -31,8 +31,6 @@ import {
   DEVICE_FEATURE_UNITS,
 } from '@gladysassistant/integration-sdk';
 
-import { withSelectors } from './selectors.js';
-
 export const DEVICE_TYPE = 'atw';
 
 export const FEATURE = {
@@ -210,13 +208,16 @@ export function buildDevice(gladys, unit, config) {
     );
   }
 
-  return withSelectors({
+  return {
     name: unit.givenDisplayName || unit.id,
     external_id: ids.device,
     model: unit.connectedInterfaceType || undefined,
+    // `poll_frequency` alone does NOT enable polling: the Gladys scheduler only
+    // picks up devices whose `should_poll` is true.
+    should_poll: true,
     poll_frequency: config.poll_frequency,
     features,
-  });
+  };
 }
 
 /**

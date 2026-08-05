@@ -17,12 +17,15 @@ cloud.
 1. Enter the **email** and **password** of your MELCloud Home account. They are
    stored encrypted by Gladys and used only to authenticate against MELCloud
    Home.
-2. Optionally adjust the **refresh interval** (how often the state is polled).
+2. Optionally pick a **refresh interval** (how often the state is polled). The
+   list only offers the intervals Gladys supports; the default is every minute,
+   which is plenty for a cloud API.
 3. Save. Use **Test the connection** to confirm your credentials.
 
 ## Adding your devices
 
-Run a device discovery: every unit on your account appears, ready to create.
+Your units are published as soon as the integration connects, so they are
+already listed in the Discovery screen — run a scan to refresh the list.
 
 - **Air-to-air units (air conditioners)** expose four features — **Power**,
   **Mode** (heat / cool / dry / fan / auto), **Target temperature** and a

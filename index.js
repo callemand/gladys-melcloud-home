@@ -94,9 +94,18 @@ async function initApi() {
 }
 
 // --- Discovery ---------------------------------------------------------------
-gladys.onScanRequest(async () => {
+/**
+ * List every unit of every family and publish them as discovered devices.
+ *
+ * The SDK swallows the errors thrown by its event handlers (they carry no ack),
+ * so a rejected publish would leave the Discovery screen empty with nothing in
+ * the logs: the failure is logged explicitly here.
+ * @returns {Promise<void>} Nothing.
+ */
+async function publishDevices() {
   if (!api) {
-    throw new Error('MELCloud Home is not configured');
+    logger.warn('Skipping discovery: MELCloud Home is not configured');
+    return;
   }
   const devices = [];
   for (const family of DEVICE_FAMILIES) {
@@ -104,8 +113,16 @@ gladys.onScanRequest(async () => {
     logger.info(`Discovered ${units.length} MELCloud Home ${family.label}(s)`);
     units.forEach((unit) => devices.push(family.module.buildDevice(gladys, unit, config)));
   }
-  await gladys.publishDiscoveredDevices(devices);
-});
+  try {
+    await gladys.publishDiscoveredDevices(devices);
+    logger.info(`Published ${devices.length} discovered device(s) to Gladys`);
+  } catch (e) {
+    logger.error('Failed to publish the discovered devices to Gladys:', e.message);
+    throw e;
+  }
+}
+
+gladys.onScanRequest(publishDevices);
 
 // --- Command -----------------------------------------------------------------
 gladys.onSetValue(async (device, feature, value) => {
@@ -144,6 +161,10 @@ gladys.onPoll(async (device) => {
 // --- Config change -----------------------------------------------------------
 gladys.onConfigUpdated(async () => {
   await initApi();
+  // The poll frequency lives on the device itself: re-publish so the change
+  // reaches the already-created devices (publishDiscoveredDevices upserts by
+  // external_id).
+  await publishDevices();
 });
 
 // --- Manifest action: test the connection ------------------------------------
@@ -165,7 +186,20 @@ gladys.onAction('test_connection', async () => {
   }
 });
 
+// --- Connection lifecycle ----------------------------------------------------
+// Authenticate and publish the devices as soon as the WebSocket is up (and on
+// every reconnection). Publishing here instead of only on `onScanRequest` means
+// the devices show up in the Discovery screen without the user having to hit
+// "Scan" first.
+gladys.on('connected', async () => {
+  try {
+    await initApi();
+    await publishDevices();
+  } catch (e) {
+    logger.error('MELCloud Home initialization failed:', e.message);
+  }
+});
+
 gladys.handleShutdown();
 
 await gladys.connect();
-await initApi();

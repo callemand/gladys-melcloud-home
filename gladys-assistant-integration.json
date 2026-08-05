@@ -6,13 +6,11 @@
     "en": "Control your Mitsubishi Electric air conditioners through the MELCloud Home cloud.",
     "fr": "Pilotez vos climatisations Mitsubishi Electric via le cloud MELCloud Home."
   },
-  "version": "1.1.1",
-  "docker_image": "ghcr.io/callemand/gladys-melcloud-home:1.1.1",
+  "version": "1.1.2",
+  "docker_image": "ghcr.io/callemand/gladys-melcloud-home:1.1.2",
   "gladys_version": ">=4.62.0",
   "cover_image": "https://raw.githubusercontent.com/callemand/gladys-melcloud-home/main/cover.png",
-  "transports": [
-    "cloud"
-  ],
+  "transports": ["cloud"],
   "config_schema": [
     {
       "key": "intro",
@@ -63,19 +61,47 @@
     },
     {
       "key": "poll_frequency",
-      "type": "number",
+      "type": "select",
       "label": {
-        "en": "Refresh interval (s)",
-        "fr": "Intervalle de rafraîchissement (s)"
+        "en": "Refresh interval",
+        "fr": "Intervalle de rafraîchissement"
       },
       "description": {
-        "en": "How often the air conditioners state is refreshed, in seconds.",
-        "fr": "Fréquence de rafraîchissement de l'état des climatisations, en secondes."
+        "en": "How often the devices state is refreshed. Gladys only accepts these intervals.",
+        "fr": "Fréquence de rafraîchissement de l'état des appareils. Gladys n'accepte que ces intervalles."
       },
       "required": false,
-      "default": 60,
-      "min": 30,
-      "max": 3600
+      "default": "60000",
+      "options": [
+        {
+          "value": "60000",
+          "label": {
+            "en": "Every minute",
+            "fr": "Toutes les minutes"
+          }
+        },
+        {
+          "value": "30000",
+          "label": {
+            "en": "Every 30 seconds",
+            "fr": "Toutes les 30 secondes"
+          }
+        },
+        {
+          "value": "15000",
+          "label": {
+            "en": "Every 15 seconds",
+            "fr": "Toutes les 15 secondes"
+          }
+        },
+        {
+          "value": "10000",
+          "label": {
+            "en": "Every 10 seconds",
+            "fr": "Toutes les 10 secondes"
+          }
+        }
+      ]
     }
   ],
   "actions": [
