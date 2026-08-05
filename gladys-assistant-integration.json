@@ -58,60 +58,6 @@
         "fr": "Le mot de passe de votre compte MELCloud Home (stocké chiffré)."
       },
       "required": true
-    },
-    {
-      "key": "poll_frequency",
-      "type": "select",
-      "label": {
-        "en": "Refresh interval",
-        "fr": "Intervalle de rafraîchissement"
-      },
-      "description": {
-        "en": "How often the devices state is refreshed. Gladys only accepts these intervals.",
-        "fr": "Fréquence de rafraîchissement de l'état des appareils. Gladys n'accepte que ces intervalles."
-      },
-      "required": false,
-      "default": "60000",
-      "options": [
-        {
-          "value": "60000",
-          "label": {
-            "en": "Every minute",
-            "fr": "Toutes les minutes"
-          }
-        },
-        {
-          "value": "30000",
-          "label": {
-            "en": "Every 30 seconds",
-            "fr": "Toutes les 30 secondes"
-          }
-        },
-        {
-          "value": "15000",
-          "label": {
-            "en": "Every 15 seconds",
-            "fr": "Toutes les 15 secondes"
-          }
-        },
-        {
-          "value": "10000",
-          "label": {
-            "en": "Every 10 seconds",
-            "fr": "Toutes les 10 secondes"
-          }
-        }
-      ]
-    }
-  ],
-  "actions": [
-    {
-      "key": "test_connection",
-      "label": {
-        "en": "Test the connection",
-        "fr": "Tester la connexion"
-      },
-      "timeout_seconds": 30
     }
   ]
 }

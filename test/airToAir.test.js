@@ -52,7 +52,7 @@ test('getSetting reads a value or undefined', () => {
 });
 
 test('buildDevice maps unit to a Gladys device with 4 features', () => {
-  const device = buildDevice(gladys, buildUnit(), { poll_frequency: 60000 });
+  const device = buildDevice(gladys, buildUnit());
   assert.equal(device.name, 'Salon');
   assert.equal(device.external_id, 'ext:test:ata:unit-1');
   assert.equal(device.model, 'fourthGenWifi');
@@ -72,7 +72,7 @@ test('buildDevice maps unit to a Gladys device with 4 features', () => {
 });
 
 test('buildDevice exposes the full AC mode range', () => {
-  const device = buildDevice(gladys, buildUnit(), { poll_frequency: 60000 });
+  const device = buildDevice(gladys, buildUnit());
   const mode = device.features.find((f) => f.external_id.endsWith(':mode'));
   assert.equal(mode.min, AC_MODE.AUTO);
   assert.equal(mode.max, AC_MODE.FAN);
@@ -82,7 +82,7 @@ test('buildDevice exposes the full AC mode range', () => {
 });
 
 test('buildDevice falls back to unit id and default bounds', () => {
-  const device = buildDevice(gladys, { id: 'x', settings: [] }, { poll_frequency: 60000 });
+  const device = buildDevice(gladys, { id: 'x', settings: [] });
   assert.equal(device.name, 'x');
   assert.equal(device.model, undefined);
   const temp = device.features.find((f) => f.external_id.endsWith(':temperature'));

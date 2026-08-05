@@ -16,11 +16,10 @@ Pilotez vos climatisations Mitsubishi Electric via le cloud MELCloud Home.
 1. Saisissez l'**email** et le **mot de passe** de votre compte MELCloud Home.
    Ils sont stockés chiffrés par Gladys et servent uniquement à s'authentifier
    auprès de MELCloud Home.
-2. Choisissez éventuellement un **intervalle de rafraîchissement** (fréquence de
-   relève de l'état). La liste ne propose que les intervalles supportés par
-   Gladys ; par défaut, toutes les minutes, ce qui suffit largement pour une
-   API cloud.
-3. Enregistrez. Utilisez **Tester la connexion** pour vérifier vos identifiants.
+2. Enregistrez. L'état de la connexion s'affiche directement sur cet écran.
+
+L'état de vos unités est rafraîchi toutes les minutes ; il n'y a rien d'autre à
+configurer.
 
 ## Ajouter vos appareils
 

@@ -19,6 +19,8 @@ import {
   DEVICE_FEATURE_UNITS,
 } from '@gladysassistant/integration-sdk';
 
+import { POLL_FREQUENCY } from '../config.js';
+
 export const DEVICE_TYPE = 'ata';
 
 export const FEATURE = {
@@ -104,10 +106,9 @@ function getTemperatureBounds(unit) {
  * Build the Gladys discovery payload for one air-to-air unit.
  * @param {object} gladys - The SDK instance.
  * @param {object} unit - Air-to-air unit.
- * @param {object} config - Integration config.
  * @returns {object} The Gladys device.
  */
-export function buildDevice(gladys, unit, config) {
+export function buildDevice(gladys, unit) {
   const ids = gladys.externalIds(DEVICE_TYPE, unit.id);
   const { min, max } = getTemperatureBounds(unit);
   return {
@@ -118,7 +119,7 @@ export function buildDevice(gladys, unit, config) {
     // `poll_frequency` alone does NOT enable polling: the Gladys scheduler only
     // picks up devices whose `should_poll` is true.
     should_poll: true,
-    poll_frequency: config.poll_frequency,
+    poll_frequency: POLL_FREQUENCY,
     features: [
       {
         name: 'Power',

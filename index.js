@@ -6,11 +6,12 @@
 //   - onSetValue    -> send a command to a unit
 //   - onPoll        -> refresh a unit's state
 //   - onConfigUpdated -> re-authenticate with the new credentials
-//   - test_connection action -> verify the credentials on demand
 //
 // Env vars provided by the Gladys supervisor (read automatically by the SDK):
 //   GLADYS_HOST_API_URL, GLADYS_INTEGRATION_TOKEN, GLADYS_INTEGRATION_SELECTOR
 // -----------------------------------------------------------------------------
+
+import { readFileSync } from 'node:fs';
 
 import { GladysIntegration, logger } from '@gladysassistant/integration-sdk';
 import { normalizeConfig } from './src/config.js';
@@ -19,6 +20,12 @@ import * as airToAir from './src/devices/airToAir.js';
 import * as airToWater from './src/devices/airToWater.js';
 
 const gladys = new GladysIntegration();
+
+// Stamped in the connection log so a bug report tells us which build is running
+// (package.json is copied into the image, see the Dockerfile).
+const { version: VERSION } = JSON.parse(
+  readFileSync(new URL('./package.json', import.meta.url), 'utf8'),
+);
 
 // Supported device families. Each entry pairs a device module (discovery/state/
 // command mapping) with the API calls that list and command that family.
@@ -82,7 +89,7 @@ async function initApi() {
   try {
     await api.getAccessToken();
     await gladys.setConnectionStatus(true);
-    logger.info('Connected to MELCloud Home');
+    logger.info(`Connected to MELCloud Home (integration v${VERSION})`);
   } catch (e) {
     api = null;
     logger.error('MELCloud Home connection failed:', e.message);
@@ -111,7 +118,7 @@ async function publishDevices() {
   for (const family of DEVICE_FAMILIES) {
     const units = await family.list(api);
     logger.info(`Discovered ${units.length} MELCloud Home ${family.label}(s)`);
-    units.forEach((unit) => devices.push(family.module.buildDevice(gladys, unit, config)));
+    units.forEach((unit) => devices.push(family.module.buildDevice(gladys, unit)));
   }
   try {
     await gladys.publishDiscoveredDevices(devices);
@@ -161,29 +168,10 @@ gladys.onPoll(async (device) => {
 // --- Config change -----------------------------------------------------------
 gladys.onConfigUpdated(async () => {
   await initApi();
-  // The poll frequency lives on the device itself: re-publish so the change
-  // reaches the already-created devices (publishDiscoveredDevices upserts by
-  // external_id).
+  // New credentials can expose a different set of units: re-publish so the
+  // Discovery screen reflects the account actually connected
+  // (publishDiscoveredDevices upserts by external_id).
   await publishDevices();
-});
-
-// --- Manifest action: test the connection ------------------------------------
-gladys.onAction('test_connection', async () => {
-  try {
-    const testApi = new MELCloudHomeApi({ email: config.email, password: config.password });
-    const ata = await testApi.listAtaUnits();
-    const atw = await testApi.listAtwUnits();
-    const count = ata.length + atw.length;
-    return {
-      en: `Connection successful: ${count} device(s) found (${ata.length} AC, ${atw.length} heat pump).`,
-      fr: `Connexion réussie : ${count} appareil(s) trouvé(s) (${ata.length} clim, ${atw.length} PAC).`,
-    };
-  } catch (e) {
-    return {
-      en: `Connection failed: ${e.message}`,
-      fr: `Échec de la connexion : ${e.message}`,
-    };
-  }
 });
 
 // --- Connection lifecycle ----------------------------------------------------

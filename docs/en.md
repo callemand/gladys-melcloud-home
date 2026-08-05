@@ -17,10 +17,10 @@ cloud.
 1. Enter the **email** and **password** of your MELCloud Home account. They are
    stored encrypted by Gladys and used only to authenticate against MELCloud
    Home.
-2. Optionally pick a **refresh interval** (how often the state is polled). The
-   list only offers the intervals Gladys supports; the default is every minute,
-   which is plenty for a cloud API.
-3. Save. Use **Test the connection** to confirm your credentials.
+2. Save. The connection status is shown right on this screen.
+
+The state of your units is refreshed every minute; there is nothing else to
+configure.
 
 ## Adding your devices
 

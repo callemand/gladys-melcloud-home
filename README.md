@@ -33,7 +33,7 @@ connection** button to check your credentials, then run a device discovery.
   (Pushed Authorization Request → AWS Cognito hosted login → IdentityServer
   callback → token). The refresh token is stored (encrypted) so the session
   survives restarts; it is refreshed automatically.
-- **State**: read from `GET /context` (polled at the configured interval).
+- **State**: read from `GET /context` (polled every minute).
 - **Commands**: sent as a full object to `PUT /monitor/ataunit/{id}`; a single
   change is overlaid on the unit's current state so the other attributes are
   preserved.

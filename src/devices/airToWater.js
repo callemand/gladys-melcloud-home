@@ -31,6 +31,8 @@ import {
   DEVICE_FEATURE_UNITS,
 } from '@gladysassistant/integration-sdk';
 
+import { POLL_FREQUENCY } from '../config.js';
+
 export const DEVICE_TYPE = 'atw';
 
 export const FEATURE = {
@@ -108,10 +110,9 @@ function getTankBounds(unit) {
  * Build the Gladys discovery payload for one air-to-water unit.
  * @param {object} gladys - The SDK instance.
  * @param {object} unit - Air-to-water unit.
- * @param {object} config - Integration config.
  * @returns {object} The Gladys device.
  */
-export function buildDevice(gladys, unit, config) {
+export function buildDevice(gladys, unit) {
   const ids = gladys.externalIds(DEVICE_TYPE, unit.id);
   const capabilities = unit.capabilities || {};
   const tank = getTankBounds(unit);
@@ -215,7 +216,7 @@ export function buildDevice(gladys, unit, config) {
     // `poll_frequency` alone does NOT enable polling: the Gladys scheduler only
     // picks up devices whose `should_poll` is true.
     should_poll: true,
-    poll_frequency: config.poll_frequency,
+    poll_frequency: POLL_FREQUENCY,
     features,
   };
 }
