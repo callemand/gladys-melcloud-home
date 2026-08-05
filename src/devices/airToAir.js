@@ -19,7 +19,7 @@ import {
   DEVICE_FEATURE_UNITS,
 } from '@gladysassistant/integration-sdk';
 
-import { withSelectors } from './selectors.js';
+import { POLL_FREQUENCY } from '../config.js';
 
 export const DEVICE_TYPE = 'ata';
 
@@ -106,18 +106,20 @@ function getTemperatureBounds(unit) {
  * Build the Gladys discovery payload for one air-to-air unit.
  * @param {object} gladys - The SDK instance.
  * @param {object} unit - Air-to-air unit.
- * @param {object} config - Integration config.
  * @returns {object} The Gladys device.
  */
-export function buildDevice(gladys, unit, config) {
+export function buildDevice(gladys, unit) {
   const ids = gladys.externalIds(DEVICE_TYPE, unit.id);
   const { min, max } = getTemperatureBounds(unit);
-  return withSelectors({
+  return {
     name: unit.givenDisplayName || unit.id,
     external_id: ids.device,
     // The API exposes no AC model; the Wi-Fi interface type is the only descriptor.
     model: unit.connectedInterfaceType || undefined,
-    poll_frequency: config.poll_frequency,
+    // `poll_frequency` alone does NOT enable polling: the Gladys scheduler only
+    // picks up devices whose `should_poll` is true.
+    should_poll: true,
+    poll_frequency: POLL_FREQUENCY,
     features: [
       {
         name: 'Power',
@@ -135,8 +137,9 @@ export function buildDevice(gladys, unit, config) {
         external_id: ids.feature(FEATURE.MODE),
         category: DEVICE_FEATURE_CATEGORIES.AIR_CONDITIONING,
         type: DEVICE_FEATURE_TYPES.AIR_CONDITIONING.MODE,
-        min: 0,
-        max: 1,
+        // The AC_MODE range, not a binary: auto(0) -> fan(4).
+        min: AC_MODE.AUTO,
+        max: AC_MODE.FAN,
         read_only: false,
         has_feedback: true,
         keep_history: true,
@@ -166,7 +169,7 @@ export function buildDevice(gladys, unit, config) {
         keep_history: true,
       },
     ],
-  });
+  };
 }
 
 /**

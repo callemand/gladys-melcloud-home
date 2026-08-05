@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { createFakeGladys } from './helpers/fakeGladys.js';
+
 import {
   buildDevice,
   readStates,
@@ -11,13 +13,7 @@ import {
   AC_MODE,
 } from '../src/devices/airToAir.js';
 
-// Minimal fake of the SDK's external id helper.
-const gladys = {
-  externalIds(type, platformId) {
-    const device = `ext:test:${type}:${platformId}`;
-    return { device, feature: (key) => `${device}:${key}` };
-  },
-};
+const gladys = createFakeGladys();
 
 const buildUnit = (overrides = {}) => ({
   id: 'unit-1',
@@ -52,27 +48,37 @@ test('getSetting reads a value or undefined', () => {
 });
 
 test('buildDevice maps unit to a Gladys device with 4 features', () => {
-  const device = buildDevice(gladys, buildUnit(), { poll_frequency: 60 });
+  const device = buildDevice(gladys, buildUnit());
   assert.equal(device.name, 'Salon');
   assert.equal(device.external_id, 'ext:test:ata:unit-1');
   assert.equal(device.model, 'fourthGenWifi');
-  assert.equal(device.poll_frequency, 60);
+  assert.equal(device.poll_frequency, 60000);
+  // `poll_frequency` alone is inert: the Gladys scheduler polls the devices
+  // flagged `should_poll`.
+  assert.equal(device.should_poll, true);
   assert.equal(device.features.length, 4);
   const temp = device.features.find((f) => f.external_id.endsWith(':temperature'));
   assert.equal(temp.min, 8);
   assert.equal(temp.max, 31);
 
-  // Explicit, globally-unique selectors (external_id without the `ext:`
-  // prefix) so features named the same across devices/integrations do not
-  // collide on the global t_device_feature.selector constraint.
-  assert.equal(device.selector, 'test:ata:unit-1');
-  device.features.forEach((f) => assert.equal(f.selector, f.external_id.replace(/^ext:/, '')));
-  const selectors = device.features.map((f) => f.selector);
-  assert.equal(new Set(selectors).size, selectors.length, 'selectors are unique');
+  // No selector is published: the core derives a unique one at creation
+  // (buildUniqueSelector) and strips any selector sent by an integration.
+  assert.equal(device.selector, undefined);
+  device.features.forEach((f) => assert.equal(f.selector, undefined));
+});
+
+test('buildDevice exposes the full AC mode range', () => {
+  const device = buildDevice(gladys, buildUnit());
+  const mode = device.features.find((f) => f.external_id.endsWith(':mode'));
+  assert.equal(mode.min, AC_MODE.AUTO);
+  assert.equal(mode.max, AC_MODE.FAN);
+  Object.values(AC_MODE).forEach((value) => {
+    assert.ok(value >= mode.min && value <= mode.max, `mode ${value} is within bounds`);
+  });
 });
 
 test('buildDevice falls back to unit id and default bounds', () => {
-  const device = buildDevice(gladys, { id: 'x', settings: [] }, { poll_frequency: 60 });
+  const device = buildDevice(gladys, { id: 'x', settings: [] });
   assert.equal(device.name, 'x');
   assert.equal(device.model, undefined);
   const temp = device.features.find((f) => f.external_id.endsWith(':temperature'));

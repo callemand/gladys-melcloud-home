@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { createFakeGladys } from './helpers/fakeGladys.js';
+
 import {
   buildDevice,
   readStates,
@@ -11,13 +13,7 @@ import {
   FEATURE,
 } from '../src/devices/airToWater.js';
 
-// Minimal fake of the SDK's external id helper.
-const gladys = {
-  externalIds(type, platformId) {
-    const device = `ext:test:${type}:${platformId}`;
-    return { device, feature: (key) => `${device}:${key}` };
-  },
-};
+const gladys = createFakeGladys();
 
 // Shaped after the real /context fixture (erwindouna/aiomelcloudhome).
 const buildUnit = (overrides = {}) => ({
@@ -57,10 +53,14 @@ test('getSetting reads a value from the settings array', () => {
 });
 
 test('buildDevice exposes the expected features with hot water', () => {
-  const device = buildDevice(gladys, buildUnit(), { poll_frequency: 60 });
+  const device = buildDevice(gladys, buildUnit());
   assert.equal(device.name, 'Ecodan');
   assert.equal(device.external_id, gladys.externalIds('atw', 'atw-1').device);
   assert.equal(device.model, 'fourthGenWifi');
+  assert.equal(device.poll_frequency, 60000);
+  assert.equal(device.should_poll, true);
+  // The core derives the selector at creation; an integration publishes none.
+  assert.equal(device.selector, undefined);
   const ids = device.features.map((f) => f.external_id);
   for (const feature of [
     FEATURE.POWER,
@@ -76,7 +76,7 @@ test('buildDevice exposes the expected features with hot water', () => {
 });
 
 test('buildDevice uses tank bounds from capabilities', () => {
-  const device = buildDevice(gladys, buildUnit(), { poll_frequency: 60 });
+  const device = buildDevice(gladys, buildUnit());
   const tank = device.features.find(
     (f) => f.external_id === featureId(FEATURE.TANK_SET_TEMPERATURE),
   );
@@ -93,7 +93,7 @@ test('buildDevice omits hot water features when the unit has no tank', () => {
       { name: 'RoomTemperatureZone1', value: '20' },
     ],
   });
-  const device = buildDevice(gladys, unit, { poll_frequency: 60 });
+  const device = buildDevice(gladys, unit);
   const ids = device.features.map((f) => f.external_id);
   assert.ok(!ids.includes(featureId(FEATURE.TANK_SET_TEMPERATURE)));
   assert.ok(!ids.includes(featureId(FEATURE.FORCED_HOT_WATER)));

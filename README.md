@@ -18,14 +18,17 @@ Air-to-air units (air conditioners) are exposed with:
 - **Target temperature** — set point
 - **Room temperature** — read-only
 
-Air-to-water (heat pumps) and ERV (ventilation) units are ignored for now.
+Air-to-water units (Ecodan heat pumps) are supported too: power, zone-1 set
+point and room temperature, hot water tank set point, tank temperature, forced
+hot water and outdoor temperature. ERV (ventilation) units are ignored for now.
 
 ## Installation
 
 From Gladys: **Integrations → Install an integration**, then find **MELCloud
 Home** in the catalog. Open its configuration, enter the **email** and
-**password** of your MELCloud Home account, and save. Use the **Test the
-connection** button to check your credentials, then run a device discovery.
+**password** of your MELCloud Home account, and save. The connection status is
+shown on that screen, and your units are published to the Discovery screen as
+soon as the login succeeds.
 
 ## How it works
 
@@ -33,7 +36,10 @@ connection** button to check your credentials, then run a device discovery.
   (Pushed Authorization Request → AWS Cognito hosted login → IdentityServer
   callback → token). The refresh token is stored (encrypted) so the session
   survives restarts; it is refreshed automatically.
-- **State**: read from `GET /context` (polled at the configured interval).
+- **State**: read from `GET /context` (polled every minute). One call returns
+  the whole account, so the listings are cached for a few seconds: the burst of
+  polls Gladys fires for each device in the same tick collapses into a single
+  request.
 - **Commands**: sent as a full object to `PUT /monitor/ataunit/{id}`; a single
   change is overlaid on the unit's current state so the other attributes are
   preserved.

@@ -10,10 +10,16 @@
 // restart without asking the user to log in again.
 // -----------------------------------------------------------------------------
 
+// Not configurable: Gladys does not accept an arbitrary polling interval
+// (`t_device.poll_frequency` is an ENUM over the core DEVICE_POLL_FREQUENCIES,
+// in MILLISECONDS), and a device carrying anything else is rejected by
+// `POST /discovered_device` with a 400. Every minute is the slowest value the
+// enum offers and is plenty for a cloud API.
+export const POLL_FREQUENCY = 60000;
+
 export const DEFAULT_CONFIG = {
   email: '',
   password: '',
-  poll_frequency: 60, // seconds
   melcloud_refresh_token: null,
 };
 
@@ -28,7 +34,6 @@ export function normalizeConfig(raw = {}) {
     ...raw,
     email: (raw.email ?? '').toString().trim(),
     password: (raw.password ?? '').toString(),
-    poll_frequency: Number(raw.poll_frequency ?? DEFAULT_CONFIG.poll_frequency),
     melcloud_refresh_token: raw.melcloud_refresh_token ?? null,
   };
 }

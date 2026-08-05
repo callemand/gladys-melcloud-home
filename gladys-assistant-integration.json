@@ -6,13 +6,11 @@
     "en": "Control your Mitsubishi Electric air conditioners through the MELCloud Home cloud.",
     "fr": "Pilotez vos climatisations Mitsubishi Electric via le cloud MELCloud Home."
   },
-  "version": "1.1.1",
-  "docker_image": "ghcr.io/callemand/gladys-melcloud-home:1.1.1",
+  "version": "1.1.2",
+  "docker_image": "ghcr.io/callemand/gladys-melcloud-home:1.1.2",
   "gladys_version": ">=4.62.0",
   "cover_image": "https://raw.githubusercontent.com/callemand/gladys-melcloud-home/main/cover.png",
-  "transports": [
-    "cloud"
-  ],
+  "transports": ["cloud"],
   "config_schema": [
     {
       "key": "intro",
@@ -60,32 +58,6 @@
         "fr": "Le mot de passe de votre compte MELCloud Home (stocké chiffré)."
       },
       "required": true
-    },
-    {
-      "key": "poll_frequency",
-      "type": "number",
-      "label": {
-        "en": "Refresh interval (s)",
-        "fr": "Intervalle de rafraîchissement (s)"
-      },
-      "description": {
-        "en": "How often the air conditioners state is refreshed, in seconds.",
-        "fr": "Fréquence de rafraîchissement de l'état des climatisations, en secondes."
-      },
-      "required": false,
-      "default": 60,
-      "min": 30,
-      "max": 3600
-    }
-  ],
-  "actions": [
-    {
-      "key": "test_connection",
-      "label": {
-        "en": "Test the connection",
-        "fr": "Tester la connexion"
-      },
-      "timeout_seconds": 30
     }
   ]
 }

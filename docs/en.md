@@ -17,12 +17,15 @@ cloud.
 1. Enter the **email** and **password** of your MELCloud Home account. They are
    stored encrypted by Gladys and used only to authenticate against MELCloud
    Home.
-2. Optionally adjust the **refresh interval** (how often the state is polled).
-3. Save. Use **Test the connection** to confirm your credentials.
+2. Save. The connection status is shown right on this screen.
+
+The state of your units is refreshed every minute; there is nothing else to
+configure.
 
 ## Adding your devices
 
-Run a device discovery: every unit on your account appears, ready to create.
+Your units are published as soon as the integration connects, so they are
+already listed in the Discovery screen — run a scan to refresh the list.
 
 - **Air-to-air units (air conditioners)** expose four features — **Power**,
   **Mode** (heat / cool / dry / fan / auto), **Target temperature** and a
