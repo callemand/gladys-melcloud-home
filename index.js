@@ -1,11 +1,14 @@
 // -----------------------------------------------------------------------------
 // Entry point of the MELCloud Home external integration.
 //
-// Wires the Gladys SDK to the MELCloud Home API:
-//   - onScanRequest -> list air-to-air units and publish them as devices
-//   - onSetValue    -> send a command to a unit
-//   - onPoll        -> refresh a unit's state
-//   - onConfigUpdated -> re-authenticate with the new credentials
+// Role of this file: wire the SDK to the device registry (src/devices/). It
+// holds NO device logic — the mapping between a MELCloud Home unit and a Gladys
+// device lives in the device modules, the routing in the registry. This file
+// only:
+//   1. instantiates the SDK (connection, auth, reconnection: handled for you);
+//   2. owns the MELCloud Home client and its (re)authentication;
+//   3. registers the event handlers BEFORE connect();
+//   4. connects and publishes the discovered devices.
 //
 // Env vars provided by the Gladys supervisor (read automatically by the SDK):
 //   GLADYS_HOST_API_URL, GLADYS_INTEGRATION_TOKEN, GLADYS_INTEGRATION_SELECTOR
@@ -16,10 +19,10 @@ import { readFileSync } from 'node:fs';
 import { GladysIntegration, logger } from '@gladysassistant/integration-sdk';
 import { normalizeConfig } from './src/config.js';
 import { MELCloudHomeApi } from './src/melcloud-home-api.js';
-import * as airToAir from './src/devices/airToAir.js';
-import * as airToWater from './src/devices/airToWater.js';
+import { createDeviceRegistry } from './src/devices/index.js';
 
 const gladys = new GladysIntegration();
+const registry = createDeviceRegistry({ gladys });
 
 // Stamped in the connection log so a bug report tells us which build is running
 // (package.json is copied into the image, see the Dockerfile).
@@ -27,40 +30,9 @@ const { version: VERSION } = JSON.parse(
   readFileSync(new URL('./package.json', import.meta.url), 'utf8'),
 );
 
-// Supported device families. Each entry pairs a device module (discovery/state/
-// command mapping) with the API calls that list and command that family.
-const DEVICE_FAMILIES = [
-  {
-    module: airToAir,
-    label: 'air conditioner',
-    list: (client) => client.listAtaUnits(),
-    set: (client, unitId, payload) => client.setAtaUnit(unitId, payload),
-  },
-  {
-    module: airToWater,
-    label: 'heat pump',
-    list: (client) => client.listAtwUnits(),
-    set: (client, unitId, payload) => client.setAtwUnit(unitId, payload),
-  },
-];
-
-/**
- * Resolve the device family, unit and API list for a Gladys device.
- * @param {object} device - The Gladys device (has external_id).
- * @returns {Promise<{family: object, unit: object, units: Array}|null>} Match or null.
- */
-async function resolveDevice(device) {
-  for (const family of DEVICE_FAMILIES) {
-    const units = await family.list(api);
-    const unit = family.module.findUnitByExternalId(gladys, units, device.external_id);
-    if (unit) {
-      return { family, unit, units };
-    }
-  }
-  return null;
-}
-
+// Current configuration (hot-reloaded via onConfigUpdated).
 let config = normalizeConfig();
+// The MELCloud Home client, null until the credentials are known and valid.
 let api = null;
 
 /**
@@ -69,6 +41,8 @@ let api = null;
  */
 async function initApi() {
   config = normalizeConfig(await gladys.getConfig());
+  // The previous account's units must not survive a credentials change.
+  registry.invalidate();
 
   if (!config.email || !config.password) {
     api = null;
@@ -102,7 +76,7 @@ async function initApi() {
 
 // --- Discovery ---------------------------------------------------------------
 /**
- * List every unit of every family and publish them as discovered devices.
+ * Publish every unit of the account as a discovered device.
  *
  * The SDK swallows the errors thrown by its event handlers (they carry no ack),
  * so a rejected publish would leave the Discovery screen empty with nothing in
@@ -114,12 +88,7 @@ async function publishDevices() {
     logger.warn('Skipping discovery: MELCloud Home is not configured');
     return;
   }
-  const devices = [];
-  for (const family of DEVICE_FAMILIES) {
-    const units = await family.list(api);
-    logger.info(`Discovered ${units.length} MELCloud Home ${family.label}(s)`);
-    units.forEach((unit) => devices.push(family.module.buildDevice(gladys, unit)));
-  }
+  const devices = await registry.buildDiscoveredDevices(api);
   try {
     await gladys.publishDiscoveredDevices(devices);
     logger.info(`Published ${devices.length} discovered device(s) to Gladys`);
@@ -129,27 +98,19 @@ async function publishDevices() {
   }
 }
 
-gladys.onScanRequest(publishDevices);
+// A scan is an explicit user gesture: never answer it from the cache.
+gladys.onScanRequest(async () => {
+  registry.invalidate();
+  await publishDevices();
+});
 
 // --- Command -----------------------------------------------------------------
 gladys.onSetValue(async (device, feature, value) => {
   if (!api) {
+    // Throw: the SDK sends a success:false acknowledgement to Gladys.
     throw new Error('MELCloud Home is not configured');
   }
-  const match = await resolveDevice(device);
-  if (!match) {
-    throw new Error(`MELCloud Home unit not found for ${device.external_id}`);
-  }
-  const payload = match.family.module.buildSetPayload(
-    gladys,
-    match.unit,
-    feature.external_id,
-    value,
-  );
-  if (!payload) {
-    throw new Error(`MELCloud Home feature is not writable: ${feature.external_id}`);
-  }
-  await match.family.set(api, match.unit.id, payload);
+  await registry.setValue(api, device, feature, value);
   await gladys.publishState(feature.external_id, value);
 });
 
@@ -158,11 +119,10 @@ gladys.onPoll(async (device) => {
   if (!api) {
     return;
   }
-  const match = await resolveDevice(device);
-  if (!match) {
-    return;
+  const states = await registry.readStates(api, device);
+  if (states) {
+    await gladys.publishStates(states);
   }
-  await gladys.publishStates(match.family.module.readStates(gladys, match.unit));
 });
 
 // --- Config change -----------------------------------------------------------
@@ -175,10 +135,11 @@ gladys.onConfigUpdated(async () => {
 });
 
 // --- Connection lifecycle ----------------------------------------------------
-// Authenticate and publish the devices as soon as the WebSocket is up (and on
-// every reconnection). Publishing here instead of only on `onScanRequest` means
-// the devices show up in the Discovery screen without the user having to hit
-// "Scan" first.
+// The SDK itself logs the WebSocket lifecycle (connections, disconnections,
+// reconnection attempts); this handler only runs the integration's own
+// (re)initialization. Authenticating and publishing here instead of only on
+// `onScanRequest` means the devices show up in the Discovery screen without the
+// user having to hit "Scan" first.
 gladys.on('connected', async () => {
   try {
     await initApi();
@@ -188,6 +149,16 @@ gladys.on('connected', async () => {
   }
 });
 
-gladys.handleShutdown();
+// --- Graceful shutdown -------------------------------------------------------
+// The SDK disconnects cleanly and exits with code 0 when the supervisor stops
+// the container (SIGTERM/SIGINT).
+gladys.handleShutdown((signal) => {
+  logger.info(`Received ${signal} -> graceful shutdown`);
+});
 
-await gladys.connect();
+// --- Startup -----------------------------------------------------------------
+logger.info(`Starting the MELCloud Home integration (v${VERSION})...`);
+gladys.connect().catch((err) => {
+  logger.error('Initial connection failed', err);
+  process.exit(1);
+});

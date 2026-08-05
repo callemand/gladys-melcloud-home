@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { createFakeGladys } from './helpers/fakeGladys.js';
+
 import {
   buildDevice,
   readStates,
@@ -11,13 +13,7 @@ import {
   FEATURE,
 } from '../src/devices/airToWater.js';
 
-// Minimal fake of the SDK's external id helper.
-const gladys = {
-  externalIds(type, platformId) {
-    const device = `ext:test:${type}:${platformId}`;
-    return { device, feature: (key) => `${device}:${key}` };
-  },
-};
+const gladys = createFakeGladys();
 
 // Shaped after the real /context fixture (erwindouna/aiomelcloudhome).
 const buildUnit = (overrides = {}) => ({
