@@ -28,8 +28,14 @@ export function compareVersions(a, b) {
   // is dropped, so a beta of the version that introduced a type counts as
   // having it. Gladys ships those to testers, and a rejected feature is a far
   // worse outcome than a feature offered slightly early.
+  //
+  // The leading "v" matters: `GET /status` reports "v4.84.4", not "4.84.4".
+  // Without stripping it, `parseInt('v4')` is NaN, the fallback below turns
+  // that into 0, and the whole version reads as 0.84.4 — older than anything.
   const parse = (version) =>
     String(version ?? '')
+      .trim()
+      .replace(/^v/i, '')
       .split('-')[0]
       .split('.')
       .map((part) => Number.parseInt(part, 10) || 0);
