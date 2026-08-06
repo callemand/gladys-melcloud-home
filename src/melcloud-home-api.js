@@ -16,6 +16,13 @@ export const API_ENDPOINT = 'https://mobile.bff.melcloudhome.com';
 // Not on the BFF: the mobile app fetches the hash from a standalone Lambda URL,
 // bearer authenticated. (The web app uses its own `GET /ws/token`, cookie+CSRF
 // authenticated — a path a mobile-BFF client like this one cannot take.)
+//
+// The opaque hostname is how AWS names a Lambda Function URL, and TLS proves
+// nothing about who owns it: the certificate is Amazon's wildcard. It is
+// trusted here because the same URL ships inside Home Assistant core, whose
+// `melcloud_home` integration requires aiomelcloudhome, where it is
+// `WS_TOKEN_URL`. Independently in mgcrea/homebridge-melcloud-home.
+// This request carries the account access token, so re-verify before changing.
 export const WS_HASH_ENDPOINT =
   'https://6x2dgdulg7omjsxalnhmo4ynba0dcgwk.lambda-url.eu-west-1.on.aws/';
 
