@@ -66,6 +66,8 @@ test('buildDevice maps unit to a Gladys device with 4 base features', () => {
   const temp = device.features.find((f) => f.external_id.endsWith(':temperature'));
   assert.equal(temp.min, 8);
   assert.equal(temp.max, 31);
+  // No half-degree capability on the base fixture -> whole-degree step.
+  assert.equal(temp.step, 1);
 
   // No selector is published: the core derives a unique one at creation
   // (buildUniqueSelector) and strips any selector sent by an integration.
@@ -81,6 +83,32 @@ test('buildDevice exposes the full AC mode range', () => {
   Object.values(AC_MODE).forEach((value) => {
     assert.ok(value >= mode.min && value <= mode.max, `mode ${value} is within bounds`);
   });
+});
+
+test('buildDevice sets the setpoint step from hasHalfDegreeIncrements', () => {
+  // Confirmed live: units reporting hasHalfDegreeIncrements accept a 0.5 step
+  // (26.5 round-tripped through the real API). Anything else stays whole-degree.
+  const halfUnit = buildUnit({
+    capabilities: { minTempCoolDry: 16, maxTempCoolDry: 31, hasHalfDegreeIncrements: true },
+  });
+  const halfStep = buildDevice(gladys, halfUnit).features.find((f) =>
+    f.external_id.endsWith(':temperature'),
+  );
+  assert.equal(halfStep.step, 0.5);
+
+  const wholeUnit = buildUnit({
+    capabilities: { minTempCoolDry: 16, maxTempCoolDry: 31, hasHalfDegreeIncrements: false },
+  });
+  const wholeStep = buildDevice(gladys, wholeUnit).features.find((f) =>
+    f.external_id.endsWith(':temperature'),
+  );
+  assert.equal(wholeStep.step, 1);
+
+  // Missing capability -> safe whole-degree default, never a phantom 0.5.
+  const unknown = buildDevice(gladys, { id: 'x', settings: [] }).features.find((f) =>
+    f.external_id.endsWith(':temperature'),
+  );
+  assert.equal(unknown.step, 1);
 });
 
 test('buildDevice falls back to unit id and default bounds', () => {

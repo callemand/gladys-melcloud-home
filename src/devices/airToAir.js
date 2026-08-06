@@ -268,6 +268,21 @@ function getTemperatureBounds(unit) {
 }
 
 /**
+ * The setpoint increment the unit accepts, in °C.
+ *
+ * `hasHalfDegreeIncrements` is a reliable capability (unlike the vane flags):
+ * it reads true on units that genuinely step by 0.5, confirmed both by units
+ * sitting on a .5 setpoint and by a live 26.5 round-trip. When it is not
+ * explicitly true, fall back to whole degrees — the safe default, since
+ * offering 0.5 on a whole-degree unit would let the UI pick a value it rounds.
+ * @param {object} unit - Air-to-air unit.
+ * @returns {number} 0.5 or 1.
+ */
+function getTemperatureStep(unit) {
+  return (unit.capabilities || {}).hasHalfDegreeIncrements === true ? 0.5 : 1;
+}
+
+/**
  * Build the Gladys discovery payload for one air-to-air unit.
  * @param {object} gladys - The SDK instance.
  * @param {object} unit - Air-to-air unit.
@@ -277,6 +292,7 @@ function getTemperatureBounds(unit) {
 export function buildDevice(gladys, unit, capabilities = DEFAULT_CAPABILITIES) {
   const ids = gladys.externalIds(DEVICE_TYPE, unit.id);
   const { min, max } = getTemperatureBounds(unit);
+  const step = getTemperatureStep(unit);
   const device = {
     name: unit.givenDisplayName || unit.id,
     external_id: ids.device,
@@ -318,6 +334,10 @@ export function buildDevice(gladys, unit, capabilities = DEFAULT_CAPABILITIES) {
         unit: DEVICE_FEATURE_UNITS.CELSIUS,
         min,
         max,
+        // Per-feature setpoint increment (Gladys reads feature.step). The AC
+        // category otherwise steps by whole degrees in the UI; these units do
+        // 0.5. An older Gladys that predates feature.step just ignores it.
+        step,
         read_only: false,
         has_feedback: true,
         keep_history: true,
