@@ -26,10 +26,13 @@ configurer.
 Vos unités sont publiées dès que l'intégration se connecte : elles apparaissent
 donc déjà dans l'écran Découverte — lancez un scan pour rafraîchir la liste.
 
-- Les **unités air-air (climatisations)** exposent quatre fonctionnalités —
-  **Marche/Arrêt**, **Mode** (chaud / froid / déshumidification / ventilation /
-  auto), **Température de consigne** et une **Température ambiante** en lecture
-  seule.
+- Les **unités air-air (climatisations)** exposent **Marche/Arrêt**, **Mode**
+  (chaud / froid / déshumidification / ventilation / auto), **Température de
+  consigne** et une **Température ambiante** en lecture seule. Les unités
+  équipées de volets ajoutent **Balayage vertical** et **Balayage horizontal**
+  (Gladys 4.84.2+ uniquement — les versions antérieures ne connaissent pas ces
+  contrôles, ils n'y sont donc pas publiés). Gladys nomme « arrêt » la position
+  automatique du volet ; c'est bien la position automatique de votre unité.
 - Les **unités air-eau (pompes à chaleur Ecodan)** exposent **Marche/Arrêt**,
   une consigne **Température zone 1** et la **Température ambiante zone 1** en
   lecture seule, un capteur **Température extérieure**, et — si un ballon d'eau

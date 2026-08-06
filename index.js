@@ -20,6 +20,7 @@ import { GladysIntegration, logger } from '@gladysassistant/integration-sdk';
 import { normalizeConfig } from './src/config.js';
 import { MELCloudHomeApi } from './src/melcloud-home-api.js';
 import { createDeviceRegistry } from './src/devices/index.js';
+import { buildCapabilities } from './src/capabilities.js';
 
 const gladys = new GladysIntegration();
 const registry = createDeviceRegistry({ gladys });
@@ -71,6 +72,30 @@ async function initApi() {
       en: 'Login failed, please check your credentials.',
       fr: 'Échec de connexion, vérifiez vos identifiants.',
     });
+  }
+}
+
+/**
+ * Ask Gladys its version and tell the registry what it can accept.
+ *
+ * A feature type the running Gladys does not know gets the WHOLE discovery
+ * payload rejected, so this runs before the first publish.
+ * @returns {Promise<void>} Nothing.
+ */
+async function resolveCapabilities() {
+  try {
+    const status = await gladys.getStatus();
+    const capabilities = buildCapabilities(status.gladys_version);
+    registry.setCapabilities(capabilities);
+    if (!capabilities.swing) {
+      logger.info(
+        `Gladys ${status.gladys_version} has no air conditioning swing support: ` +
+          'the vane controls are not published (needs Gladys 4.84.2+)',
+      );
+    }
+  } catch (e) {
+    // Keep the conservative default rather than risk a rejected discovery.
+    logger.warn('Could not read the Gladys version, swing controls disabled:', e.message);
   }
 }
 
@@ -142,6 +167,7 @@ gladys.onConfigUpdated(async () => {
 // user having to hit "Scan" first.
 gladys.on('connected', async () => {
   try {
+    await resolveCapabilities();
     await initApi();
     await publishDevices();
   } catch (e) {
