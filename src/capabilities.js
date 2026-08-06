@@ -1,18 +1,10 @@
-// -----------------------------------------------------------------------------
-// What the Gladys instance on the other end actually supports.
+// What the Gladys instance on the other end supports.
 //
-// Gladys validates every published device feature against ITS OWN list of
-// feature types: a type the running version does not know makes
-// `POST /discovered_device` fail with a 400 — and since the SDK swallows the
-// errors of its event handlers, the whole discovery would silently vanish from
-// the Discovery screen (the bug fixed in 1.1.2).
-//
-// The AC swing types (`swing-vertical`, `swing-horizontal`) and the AC_SWING_*
-// vocabulary landed in Gladys 4.84.2 — they are absent from 4.84.1. Rather than
-// raising the manifest's `gladys_version` and locking every older instance out
-// of the integration entirely, the vane features are published only to the
-// versions that can accept them.
-// -----------------------------------------------------------------------------
+// Gladys validates feature types against its own list: an unknown one fails
+// `POST /discovered_device` with a 400 and takes the whole discovery with it,
+// silently (the SDK swallows scan-handler errors). Gating per version beats
+// raising the manifest's `gladys_version`, which would lock older instances out
+// of the integration entirely.
 
 // First Gladys version exposing DEVICE_FEATURE_TYPES.AIR_CONDITIONING.SWING_*.
 export const SWING_MIN_GLADYS_VERSION = '4.84.2';
@@ -25,13 +17,11 @@ export const SWING_MIN_GLADYS_VERSION = '4.84.2';
  */
 export function compareVersions(a, b) {
   // Only the numeric core is compared: a pre-release suffix ("4.84.2-beta.1")
-  // is dropped, so a beta of the version that introduced a type counts as
-  // having it. Gladys ships those to testers, and a rejected feature is a far
-  // worse outcome than a feature offered slightly early.
+  // is dropped, so a beta counts as having the type it introduced.
   //
-  // The leading "v" matters: `GET /status` reports "v4.84.4", not "4.84.4".
-  // Without stripping it, `parseInt('v4')` is NaN, the fallback below turns
-  // that into 0, and the whole version reads as 0.84.4 — older than anything.
+  // The leading "v" matters: `GET /status` reports "v4.84.4". Unstripped,
+  // `parseInt('v4')` is NaN, the fallback turns it into 0, and the version
+  // reads as 0.84.4 — older than anything.
   const parse = (version) =>
     String(version ?? '')
       .trim()

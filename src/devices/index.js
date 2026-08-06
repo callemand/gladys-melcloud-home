@@ -1,19 +1,7 @@
-// -----------------------------------------------------------------------------
-// Device registry.
-//
-// Add or remove device families here. Each family lives in its own file and
-// exposes the same shape:
-//   - buildDevice(gladys, unit)                  : the discovery payload
-//   - readStates(gladys, unit)                   : the states to publish
-//   - buildSetPayload(gladys, unit, id, value)   : the command body, or null
-//     when the feature is read-only
-//   - findUnitByExternalId(gladys, units, id)    : dispatch a Gladys device back
-//     to the MELCloud Home unit it was built from
-//
-// A blueprint pairs such a module with the two API calls that list and command
-// that family. `createDeviceRegistry` turns the set of blueprints into the
-// routing the entry point needs, and owns the cache in front of the listings.
-// -----------------------------------------------------------------------------
+// Device registry. A blueprint pairs a device module — buildDevice, readStates,
+// buildSetPayload, findUnitByExternalId — with the API calls that list and
+// command its family. `createDeviceRegistry` turns them into the routing the
+// entry point needs, and owns the cache in front of the listings.
 
 import { logger } from '@gladysassistant/integration-sdk';
 
