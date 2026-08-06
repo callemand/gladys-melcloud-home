@@ -5,12 +5,19 @@
 //   - GET  /context               -> buildings + air-to-air / air-to-water units
 //   - PUT  /monitor/ataunit/{id}   -> command an air-to-air unit
 //   - PUT  /monitor/atwunit/{id}   -> command an air-to-water unit
+//   - GET  <ws hash endpoint>      -> credential for the real-time WebSocket
 // -----------------------------------------------------------------------------
 
 import axios from 'axios';
 import * as oauth from './oauth.js';
 
 export const API_ENDPOINT = 'https://mobile.bff.melcloudhome.com';
+
+// Not on the BFF: the mobile app fetches the hash from a standalone Lambda URL,
+// bearer authenticated. (The web app uses its own `GET /ws/token`, cookie+CSRF
+// authenticated — a path a mobile-BFF client like this one cannot take.)
+export const WS_HASH_ENDPOINT =
+  'https://6x2dgdulg7omjsxalnhmo4ynba0dcgwk.lambda-url.eu-west-1.on.aws/';
 
 const TOKEN_REFRESH_BUFFER_SECONDS = 60;
 const DEFAULT_EXPIRES_IN_SECONDS = 3600;
@@ -95,6 +102,23 @@ export class MELCloudHomeApi {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     return data;
+  }
+
+  /**
+   * Fetch the credential for the real-time WebSocket.
+   * @returns {Promise<string>} The hash.
+   */
+  async getWebSocketHash() {
+    const accessToken = await this.getAccessToken();
+    const { data } = await this.client.get(WS_HASH_ENDPOINT, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    // Both shapes occur: a bare string, or `{ hash, userId }`.
+    const hash = typeof data === 'string' ? data.trim() : data && data.hash;
+    if (!hash || typeof hash !== 'string') {
+      throw new Error('MELCloud Home: no WebSocket hash returned');
+    }
+    return hash;
   }
 
   /**

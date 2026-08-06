@@ -21,6 +21,7 @@ import { normalizeConfig } from './src/config.js';
 import { MELCloudHomeApi } from './src/melcloud-home-api.js';
 import { createDeviceRegistry } from './src/devices/index.js';
 import { buildCapabilities } from './src/capabilities.js';
+import { createRealtimeClient } from './src/realtime.js';
 
 const gladys = new GladysIntegration();
 const registry = createDeviceRegistry({ gladys });
@@ -108,7 +109,7 @@ async function resolveCapabilities() {
  * the logs: the failure is logged explicitly here.
  * @returns {Promise<void>} Nothing.
  */
-async function publishDevices() {
+async function doPublishDevices() {
   if (!api) {
     logger.warn('Skipping discovery: MELCloud Home is not configured');
     return;
@@ -122,6 +123,50 @@ async function publishDevices() {
     throw e;
   }
 }
+
+// Connecting, a config change and a Scan can each ask for a publish at once,
+// duplicating the log line and the POST.
+let publishInFlight = null;
+
+/**
+ * Publish the discovered devices, joining a publish already in flight.
+ * @returns {Promise<void>} Nothing.
+ */
+function publishDevices() {
+  if (!publishInFlight) {
+    publishInFlight = doPublishDevices().finally(() => {
+      publishInFlight = null;
+    });
+  }
+  return publishInFlight;
+}
+
+// --- Real time ---------------------------------------------------------------
+/**
+ * Refresh and publish the state of every created device. Costs one `/context`
+ * request in total: the unit cache shares it across the devices.
+ * @returns {Promise<void>} Nothing.
+ */
+async function refreshAllStates() {
+  if (!api) {
+    return;
+  }
+  registry.invalidate();
+  const devices =
+    gladys.devices && gladys.devices.length ? gladys.devices : await gladys.getDevices();
+  for (const device of devices) {
+    const states = await registry.readStates(api, device);
+    if (states) {
+      await gladys.publishStates(states);
+    }
+  }
+}
+
+const realtime = createRealtimeClient({
+  getApi: () => api,
+  onUnitsChanged: refreshAllStates,
+  logger,
+});
 
 // A scan is an explicit user gesture: never answer it from the cache.
 gladys.onScanRequest(async () => {
@@ -151,12 +196,21 @@ gladys.onPoll(async (device) => {
 });
 
 // --- Config change -----------------------------------------------------------
-gladys.onConfigUpdated(async () => {
+gladys.onConfigUpdated(async (newConfig) => {
+  // Persisting the refresh token is itself a config write and comes back here:
+  // re-initializing on it would rebuild the client, refresh, persist again.
+  const next = normalizeConfig(newConfig);
+  if (next.email === config.email && next.password === config.password) {
+    config = next;
+    return;
+  }
   await initApi();
   // New credentials can expose a different set of units: re-publish so the
   // Discovery screen reflects the account actually connected
   // (publishDiscoveredDevices upserts by external_id).
   await publishDevices();
+  // The hash is tied to the account.
+  realtime.restart();
 });
 
 // --- Connection lifecycle ----------------------------------------------------
@@ -170,6 +224,7 @@ gladys.on('connected', async () => {
     await resolveCapabilities();
     await initApi();
     await publishDevices();
+    realtime.start();
   } catch (e) {
     logger.error('MELCloud Home initialization failed:', e.message);
   }
@@ -180,6 +235,7 @@ gladys.on('connected', async () => {
 // the container (SIGTERM/SIGINT).
 gladys.handleShutdown((signal) => {
   logger.info(`Received ${signal} -> graceful shutdown`);
+  realtime.stop();
 });
 
 // --- Startup -----------------------------------------------------------------
