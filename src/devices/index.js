@@ -20,6 +20,7 @@ import { logger } from '@gladysassistant/integration-sdk';
 import * as airToAir from './airToAir.js';
 import * as airToWater from './airToWater.js';
 import { createUnitCache } from './unitCache.js';
+import { DEFAULT_CAPABILITIES } from '../capabilities.js';
 
 export const DEVICE_BLUEPRINTS = [
   {
@@ -53,6 +54,10 @@ export function createDeviceRegistry({
 } = {}) {
   const listUnits = (api, blueprint) => cache.get(blueprint.key, () => blueprint.listUnits(api));
 
+  // What the Gladys instance supports, resolved from its version once connected.
+  // Until then the conservative default applies (see src/capabilities.js).
+  let capabilities = DEFAULT_CAPABILITIES;
+
   /**
    * Find the blueprint and the unit a Gladys device was built from.
    * @param {object} api - The MELCloud Home client.
@@ -74,6 +79,15 @@ export function createDeviceRegistry({
     blueprints,
 
     /**
+     * Declare what the connected Gladys instance supports.
+     * @param {object} newCapabilities - The capability flags.
+     * @returns {void} Nothing.
+     */
+    setCapabilities(newCapabilities) {
+      capabilities = newCapabilities;
+    },
+
+    /**
      * Drop the cached listings, so the next read hits MELCloud Home.
      * @returns {void} Nothing.
      */
@@ -91,7 +105,9 @@ export function createDeviceRegistry({
       for (const blueprint of blueprints) {
         const units = await listUnits(api, blueprint);
         logger.info(`Discovered ${units.length} MELCloud Home ${blueprint.label}(s)`);
-        units.forEach((unit) => devices.push(blueprint.module.buildDevice(gladys, unit)));
+        units.forEach((unit) =>
+          devices.push(blueprint.module.buildDevice(gladys, unit, capabilities)),
+        );
       }
       return devices;
     },
