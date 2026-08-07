@@ -1,23 +1,10 @@
-// -----------------------------------------------------------------------------
-// Short-lived cache over the MELCloud Home unit listings.
-//
-// Every unit of a family comes from ONE `GET /context` call, but Gladys polls
-// device by device: with four air conditioners on the same poll frequency, the
-// scheduler fires four `onPoll` in the same tick and the naive implementation
-// re-fetched the whole account four times a minute (and once more per command).
-//
-// Two mechanisms, both needed:
-//   - in-flight sharing: concurrent callers await the SAME promise, so a burst
-//     of polls collapses into a single request;
-//   - a short TTL: back-to-back ticks reuse the response instead of re-fetching.
-//
-// The TTL is deliberately much shorter than the poll frequency (one minute), so
-// a poll never serves a state from the previous tick. Commands invalidate the
-// cache explicitly, so the poll that follows a command reads the real state.
-// -----------------------------------------------------------------------------
+// Cache over the unit listings: one `GET /context` returns a whole family, but
+// Gladys polls device by device, firing one `onPoll` per device in the same
+// tick. Concurrent callers share the in-flight promise, and the TTL covers
+// back-to-back ticks.
 
-// Long enough to collapse a burst of simultaneous polls, short enough that no
-// poll cycle (60 s) is ever served from the previous one.
+// Well under the one-minute poll cycle, so a poll is never served the previous
+// cycle's state.
 export const DEFAULT_TTL = 10000;
 
 /**
@@ -45,8 +32,7 @@ export function createUnitCache({ ttl = DEFAULT_TTL, now = () => Date.now() } = 
       const promise = Promise.resolve().then(loader);
       const entry = { expiresAt: now() + ttl, promise };
       entries.set(key, entry);
-      // A failed load must not be cached: drop it so the next caller retries.
-      // The rejection still reaches the caller through the returned promise.
+      // Never cache a failure; the rejection still reaches the caller.
       promise.catch(() => {
         if (entries.get(key) === entry) {
           entries.delete(key);

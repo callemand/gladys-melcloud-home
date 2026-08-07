@@ -1,19 +1,8 @@
-// -----------------------------------------------------------------------------
-// Device type: AIR-TO-AIR unit (air conditioner).
+// AIR-TO-AIR unit (air conditioner).
 //
-// Maps a MELCloud Home air-to-air unit to a Gladys device:
-//   - power               (on/off)
-//   - mode                (heat / cool / dry / fan / auto)
-//   - target temperature  (set point)
-//   - room temperature    (read-only)
-//   - vertical swing      (vane, only on units that report one)
-//   - horizontal swing    (vane, only on units that report one)
-//
-// MELCloud Home returns the state as a `settings: [{name, value}]` array where
-// every value is a STRING ("True", "Cool", "28"...). Commands are sent as a full
-// flat camelCase object to `PUT /monitor/ataunit/{id}`, so a change is overlaid
-// on the current full state to avoid resetting the other attributes.
-// -----------------------------------------------------------------------------
+// State comes as a `settings: [{name, value}]` array of STRINGS ("True",
+// "Cool", "28"). Commands go to `PUT /monitor/ataunit/{id}` as a flat camelCase
+// object; a change is overlaid on the current state so the rest is preserved.
 
 import {
   DEVICE_FEATURE_CATEGORIES,
