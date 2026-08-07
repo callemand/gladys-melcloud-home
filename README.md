@@ -17,6 +17,7 @@ Air-to-air units (air conditioners) are exposed with:
 - **Mode** — heat / cool / dry / fan / auto
 - **Target temperature** — set point
 - **Room temperature** — read-only
+- **Fan speed** — auto, or the speeds the unit reports (`numberOfFanSpeeds`)
 - **Vertical swing** and **Horizontal swing** — vane position, on the units that
   have vanes. Requires Gladys 4.84.2+ (the version that introduced the air
   conditioning swing feature types); on older versions the two controls are

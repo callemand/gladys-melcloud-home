@@ -21,6 +21,7 @@ const SWING_FEATURE_TYPE = {
   VERTICAL: 'swing-vertical',
   HORIZONTAL: 'swing-horizontal',
 };
+const FAN_SPEED_FEATURE_TYPE = 'fan-speed';
 
 export const FEATURE = {
   POWER: 'power',
@@ -29,6 +30,7 @@ export const FEATURE = {
   ROOM_TEMPERATURE: 'room-temperature',
   SWING_VERTICAL: 'swing-vertical',
   SWING_HORIZONTAL: 'swing-horizontal',
+  FAN_SPEED: 'fan-speed',
 };
 
 // Gladys AC_MODE values (mirrors the Gladys core constants; the SDK does not
@@ -188,13 +190,93 @@ const SWING_HORIZONTAL_LABELS = {
   [AC_SWING_HORIZONTAL.POSITION_5]: 'Right',
 };
 
+// --- Fan speed ---------------------------------------------------------------
+// Gladys also has QUIET and TURBO, which MELCloud has no equivalent for.
+export const AC_FAN_SPEED = {
+  AUTO: 0,
+  LOW: 1,
+  LOW_MID: 2,
+  MID: 3,
+  MID_HIGH: 4,
+  HIGH: 5,
+};
+
+// "Off" only ever comes back on ActualFanSpeed, never as a setpoint.
+export const ATA_FAN_SPEED = {
+  AUTO: 'Auto',
+  ONE: 'One',
+  TWO: 'Two',
+  THREE: 'Three',
+  FOUR: 'Four',
+  FIVE: 'Five',
+};
+
+const FAN_SPEED_BY_CODE = {
+  0: ATA_FAN_SPEED.AUTO,
+  1: ATA_FAN_SPEED.ONE,
+  2: ATA_FAN_SPEED.TWO,
+  3: ATA_FAN_SPEED.THREE,
+  4: ATA_FAN_SPEED.FOUR,
+  5: ATA_FAN_SPEED.FIVE,
+};
+
+const FAN_SPEED_TO_GLADYS = {
+  [ATA_FAN_SPEED.AUTO]: AC_FAN_SPEED.AUTO,
+  [ATA_FAN_SPEED.ONE]: AC_FAN_SPEED.LOW,
+  [ATA_FAN_SPEED.TWO]: AC_FAN_SPEED.LOW_MID,
+  [ATA_FAN_SPEED.THREE]: AC_FAN_SPEED.MID,
+  [ATA_FAN_SPEED.FOUR]: AC_FAN_SPEED.MID_HIGH,
+  [ATA_FAN_SPEED.FIVE]: AC_FAN_SPEED.HIGH,
+};
+
+const FAN_SPEED_TO_MELCLOUD = invert(FAN_SPEED_TO_GLADYS);
+
+const FAN_SPEED_LABELS = {
+  [AC_FAN_SPEED.AUTO]: 'Auto',
+  [AC_FAN_SPEED.LOW]: 'Speed 1',
+  [AC_FAN_SPEED.LOW_MID]: 'Speed 2',
+  [AC_FAN_SPEED.MID]: 'Speed 3',
+  [AC_FAN_SPEED.MID_HIGH]: 'Speed 4',
+  [AC_FAN_SPEED.HIGH]: 'Speed 5',
+};
+
+// Gladys value of the Nth speed, so `numberOfFanSpeeds` maps to a range.
+const FAN_SPEED_BY_RANK = [
+  AC_FAN_SPEED.LOW,
+  AC_FAN_SPEED.LOW_MID,
+  AC_FAN_SPEED.MID,
+  AC_FAN_SPEED.MID_HIGH,
+  AC_FAN_SPEED.HIGH,
+];
+const MAX_FAN_SPEEDS = FAN_SPEED_BY_RANK.length;
+
 /**
- * Normalize a vane setting to its MELCloud string, accepting the integer code.
- * @param {string|number|undefined} value - The raw setting value.
- * @param {object} byCode - The code table of that vane.
- * @returns {string|undefined} The MELCloud direction string.
+ * Build the `supported_options` of the fan speed feature: Auto plus only the
+ * speeds this unit actually has.
+ * @param {object} unit - Air-to-air unit.
+ * @returns {Array} The supported options.
  */
-function toVaneDirection(value, byCode) {
+function buildFanSpeedOptions(unit) {
+  const reported = (unit.capabilities || {}).numberOfFanSpeeds;
+  const count =
+    typeof reported === 'number' && reported > 0
+      ? Math.min(reported, MAX_FAN_SPEEDS)
+      : MAX_FAN_SPEEDS;
+  const values = [AC_FAN_SPEED.AUTO, ...FAN_SPEED_BY_RANK.slice(0, count)];
+  return values.map((value, index) => ({
+    value,
+    label: FAN_SPEED_LABELS[value],
+    sort_order: index,
+  }));
+}
+
+/**
+ * Normalize an enum setting to its MELCloud string, accepting the integer code.
+ * @param {string|number|undefined} value - The raw setting value.
+ * @param {object} byCode - The code table of that setting.
+ * @returns {string|undefined} The MELCloud string.
+ */
+function toEnumSetting(value, byCode) {
   if (value === undefined || value === null || value === '') {
     return undefined;
   }
@@ -326,9 +408,24 @@ export function buildDevice(gladys, unit, capabilities = DEFAULT_CAPABILITIES) {
     ],
   };
 
-  // Gladys < 4.84.2 does not know the swing feature types and rejects the WHOLE
-  // discovery payload when it meets one, so the vanes are simply not offered
-  // there (see src/capabilities.js).
+  // Gladys < 4.84.2 does not know these feature types and rejects the WHOLE
+  // discovery payload when it meets one, so they are simply not offered there
+  // (see src/capabilities.js).
+  if (capabilities.fanSpeed && getSetting(unit, 'SetFanSpeed') !== undefined) {
+    device.features.push({
+      name: 'Fan speed',
+      external_id: ids.feature(FEATURE.FAN_SPEED),
+      category: DEVICE_FEATURE_CATEGORIES.AIR_CONDITIONING,
+      type: FAN_SPEED_FEATURE_TYPE,
+      min: AC_FAN_SPEED.AUTO,
+      max: AC_FAN_SPEED.HIGH,
+      read_only: false,
+      has_feedback: true,
+      keep_history: true,
+      supported_options: buildFanSpeedOptions(unit),
+    });
+  }
+
   if (!capabilities.swing) {
     return device;
   }
@@ -398,9 +495,18 @@ export function readStates(gladys, unit) {
     });
   }
 
+  const fanSpeed =
+    FAN_SPEED_TO_GLADYS[toEnumSetting(getSetting(unit, 'SetFanSpeed'), FAN_SPEED_BY_CODE)];
+  if (fanSpeed !== undefined) {
+    states.push({
+      device_feature_external_id: ids.feature(FEATURE.FAN_SPEED),
+      state: fanSpeed,
+    });
+  }
+
   const swingVertical =
     SWING_VERTICAL_TO_GLADYS[
-      toVaneDirection(getSetting(unit, 'VaneVerticalDirection'), VANE_VERTICAL_BY_CODE)
+      toEnumSetting(getSetting(unit, 'VaneVerticalDirection'), VANE_VERTICAL_BY_CODE)
     ];
   if (swingVertical !== undefined) {
     states.push({
@@ -411,7 +517,7 @@ export function readStates(gladys, unit) {
 
   const swingHorizontal =
     SWING_HORIZONTAL_TO_GLADYS[
-      toVaneDirection(getSetting(unit, 'VaneHorizontalDirection'), VANE_HORIZONTAL_BY_CODE)
+      toEnumSetting(getSetting(unit, 'VaneHorizontalDirection'), VANE_HORIZONTAL_BY_CODE)
     ];
   if (swingHorizontal !== undefined) {
     states.push({
@@ -433,13 +539,13 @@ export function buildFullPayload(unit) {
     power: getSetting(unit, 'Power') === 'True',
     operationMode: getSetting(unit, 'OperationMode'),
     setTemperature: toNumber(getSetting(unit, 'SetTemperature')),
-    setFanSpeed: getSetting(unit, 'SetFanSpeed'),
+    setFanSpeed: toEnumSetting(getSetting(unit, 'SetFanSpeed'), FAN_SPEED_BY_CODE) ?? null,
     // Normalized: a unit reporting the integer code must not have it echoed
     // back as a code in a body the API reads as direction strings.
     vaneVerticalDirection:
-      toVaneDirection(getSetting(unit, 'VaneVerticalDirection'), VANE_VERTICAL_BY_CODE) ?? null,
+      toEnumSetting(getSetting(unit, 'VaneVerticalDirection'), VANE_VERTICAL_BY_CODE) ?? null,
     vaneHorizontalDirection:
-      toVaneDirection(getSetting(unit, 'VaneHorizontalDirection'), VANE_HORIZONTAL_BY_CODE) ?? null,
+      toEnumSetting(getSetting(unit, 'VaneHorizontalDirection'), VANE_HORIZONTAL_BY_CODE) ?? null,
     temperatureIncrementOverride: null,
     inStandbyMode: getSetting(unit, 'InStandbyMode') === 'True',
   };
@@ -463,6 +569,9 @@ export function buildSetPayload(gladys, unit, featureExternalId, value) {
     overlay = { operationMode: MODE_TO_MELCLOUD[value] };
   } else if (featureExternalId === ids.feature(FEATURE.TEMPERATURE)) {
     overlay = { setTemperature: value };
+  } else if (featureExternalId === ids.feature(FEATURE.FAN_SPEED)) {
+    const speed = FAN_SPEED_TO_MELCLOUD[value];
+    overlay = speed ? { setFanSpeed: speed } : null;
   } else if (featureExternalId === ids.feature(FEATURE.SWING_VERTICAL)) {
     const direction = SWING_VERTICAL_TO_MELCLOUD[value];
     overlay = direction ? { vaneVerticalDirection: direction } : null;

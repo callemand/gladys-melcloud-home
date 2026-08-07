@@ -33,6 +33,13 @@ test('compareVersions tolerates missing parts and pre-release suffixes', () => {
   assert.ok(compareVersions('', '4.84.2') < 0);
 });
 
+test('fan speed follows the same version gate as swing', () => {
+  // Both feature types landed in 4.84.2, verified against the Gladys tags.
+  assert.equal(buildCapabilities('v4.84.1').fanSpeed, false);
+  assert.equal(buildCapabilities('v4.84.2').fanSpeed, true);
+  assert.equal(buildCapabilities(null).fanSpeed, false);
+});
+
 test('swing is enabled from the Gladys version that introduced it', () => {
   // Verified against the Gladys tags: absent in 4.84.1, present in 4.84.2.
   assert.equal(buildCapabilities('4.84.1').swing, false);
