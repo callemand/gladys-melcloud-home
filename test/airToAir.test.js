@@ -14,6 +14,7 @@ import {
   AC_MODE,
   AC_SWING_VERTICAL,
   AC_SWING_HORIZONTAL,
+  AC_FAN_SPEED,
 } from '../src/devices/airToAir.js';
 
 const gladys = createFakeGladys();
@@ -99,6 +100,7 @@ test('readStates publishes power, mode and temperatures', () => {
     { device_feature_external_id: 'ext:test:ata:unit-1:mode', state: AC_MODE.COOLING },
     { device_feature_external_id: 'ext:test:ata:unit-1:temperature', state: 21 },
     { device_feature_external_id: 'ext:test:ata:unit-1:room-temperature', state: 23.5 },
+    { device_feature_external_id: 'ext:test:ata:unit-1:fan-speed', state: AC_FAN_SPEED.MID_HIGH },
     {
       device_feature_external_id: 'ext:test:ata:unit-1:swing-vertical',
       state: AC_SWING_VERTICAL.SWING,
@@ -326,4 +328,105 @@ test('buildDevice publishes no swing feature to a Gladys that predates them', ()
   const device = buildDevice(gladys, buildUnit(), buildCapabilities('4.84.1'));
   assert.equal(device.features.length, 4);
   assert.ok(!device.features.some((f) => f.external_id.includes(':swing-')));
+});
+
+// --- Fan speed ---------------------------------------------------------------
+
+test('buildDevice exposes the fan speed with the unit own number of speeds', () => {
+  const device = buildDevice(gladys, buildUnit(), SWING);
+  const fan = device.features.find((f) => f.external_id.endsWith(':fan-speed'));
+  assert.equal(fan.type, 'fan-speed');
+  assert.equal(fan.category, 'air-conditioning');
+  assert.equal(fan.read_only, false);
+  assert.equal(fan.min, AC_FAN_SPEED.AUTO);
+  assert.equal(fan.max, AC_FAN_SPEED.HIGH);
+  // No numberOfFanSpeeds in the fixture: the full range.
+  assert.deepEqual(
+    fan.supported_options.map((o) => o.value),
+    [0, 1, 2, 3, 4, 5],
+  );
+});
+
+test('a unit with fewer speeds only offers the ones it has', () => {
+  const unit = buildUnit({ capabilities: { numberOfFanSpeeds: 3 } });
+  const fan = buildDevice(gladys, unit, SWING).features.find((f) =>
+    f.external_id.endsWith(':fan-speed'),
+  );
+  // Auto plus speeds 1-3, never a dead speed 4 or 5.
+  assert.deepEqual(
+    fan.supported_options.map((o) => o.value),
+    [AC_FAN_SPEED.AUTO, AC_FAN_SPEED.LOW, AC_FAN_SPEED.LOW_MID, AC_FAN_SPEED.MID],
+  );
+  assert.deepEqual(
+    fan.supported_options.map((o) => o.sort_order),
+    [0, 1, 2, 3],
+  );
+});
+
+test('an absurd number of speeds is clamped to what MELCloud defines', () => {
+  [0, -1, 99, null, 'x'].forEach((numberOfFanSpeeds) => {
+    const unit = buildUnit({ capabilities: { numberOfFanSpeeds } });
+    const fan = buildDevice(gladys, unit, SWING).features.find((f) =>
+      f.external_id.endsWith(':fan-speed'),
+    );
+    assert.equal(
+      fan.supported_options.length,
+      6,
+      `${numberOfFanSpeeds} falls back to the full range`,
+    );
+  });
+});
+
+test('buildDevice omits the fan speed on a unit that reports none', () => {
+  const unit = buildUnit({ settings: [{ name: 'Power', value: 'True' }] });
+  const ids = buildDevice(gladys, unit, SWING).features.map((f) => f.external_id);
+  assert.ok(!ids.some((id) => id.endsWith(':fan-speed')));
+});
+
+test('buildDevice omits the fan speed on a Gladys that predates it', () => {
+  const device = buildDevice(gladys, buildUnit(), buildCapabilities('4.84.1'));
+  assert.ok(!device.features.some((f) => f.external_id.endsWith(':fan-speed')));
+});
+
+test('readStates maps the fan speed, including the integer code form', () => {
+  const read = (value) => {
+    const states = readStates(gladys, buildUnit({ settings: [{ name: 'SetFanSpeed', value }] }));
+    const match = states.find((s) => s.device_feature_external_id.endsWith(':fan-speed'));
+    return match ? match.state : undefined;
+  };
+  assert.equal(read('Auto'), AC_FAN_SPEED.AUTO);
+  assert.equal(read('One'), AC_FAN_SPEED.LOW);
+  assert.equal(read('Five'), AC_FAN_SPEED.HIGH);
+  assert.equal(read(3), AC_FAN_SPEED.MID);
+  assert.equal(read('5'), AC_FAN_SPEED.HIGH);
+  // "Off" only ever appears on ActualFanSpeed and has no Gladys equivalent.
+  assert.equal(read('Off'), undefined);
+  assert.equal(read('Nope'), undefined);
+});
+
+test('buildSetPayload round-trips every fan speed', () => {
+  const unit = buildUnit();
+  Object.values(AC_FAN_SPEED).forEach((value) => {
+    const payload = buildSetPayload(gladys, unit, 'ext:test:ata:unit-1:fan-speed', value);
+    assert.ok(payload, `speed ${value} is writable`);
+    const back = readStates(
+      gladys,
+      buildUnit({ settings: [{ name: 'SetFanSpeed', value: payload.setFanSpeed }] }),
+    ).find((s) => s.device_feature_external_id.endsWith(':fan-speed'));
+    assert.equal(back.state, value, `speed ${value} round-trips`);
+  });
+});
+
+test('buildSetPayload preserves the rest of the state and rejects an unknown speed', () => {
+  const unit = buildUnit();
+  const payload = buildSetPayload(gladys, unit, 'ext:test:ata:unit-1:fan-speed', AC_FAN_SPEED.LOW);
+  assert.equal(payload.setFanSpeed, 'One');
+  assert.equal(payload.operationMode, 'Cool');
+  assert.equal(payload.setTemperature, 21);
+  assert.equal(buildSetPayload(gladys, unit, 'ext:test:ata:unit-1:fan-speed', 99), null);
+});
+
+test('buildFullPayload normalizes a fan speed code to its string', () => {
+  const payload = buildFullPayload(buildUnit({ settings: [{ name: 'SetFanSpeed', value: 2 }] }));
+  assert.equal(payload.setFanSpeed, 'Two');
 });

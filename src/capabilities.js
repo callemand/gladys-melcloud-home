@@ -9,6 +9,9 @@
 // First Gladys version exposing DEVICE_FEATURE_TYPES.AIR_CONDITIONING.SWING_*.
 export const SWING_MIN_GLADYS_VERSION = '4.84.2';
 
+// ...AIR_CONDITIONING.FAN_SPEED. Same release, but kept as its own fact.
+export const FAN_SPEED_MIN_GLADYS_VERSION = '4.84.2';
+
 /**
  * Compare two dotted version strings.
  * @param {string} a - Left version.
@@ -44,13 +47,16 @@ export function compareVersions(a, b) {
 /**
  * Build the capability flags for a given Gladys version.
  * @param {string|null} gladysVersion - The version reported by `GET /status`.
- * @returns {{swing: boolean}} The capabilities.
+ * @returns {{swing: boolean, fanSpeed: boolean}} The capabilities.
  */
 export function buildCapabilities(gladysVersion) {
+  // An unknown version is treated as "too old": publishing an unsupported
+  // feature type costs the whole discovery, omitting it costs a few controls.
+  const supports = (minimum) =>
+    Boolean(gladysVersion) && compareVersions(gladysVersion, minimum) >= 0;
   return {
-    // An unknown version is treated as "too old": publishing an unsupported
-    // feature type costs the whole discovery, omitting it costs two controls.
-    swing: Boolean(gladysVersion) && compareVersions(gladysVersion, SWING_MIN_GLADYS_VERSION) >= 0,
+    swing: supports(SWING_MIN_GLADYS_VERSION),
+    fanSpeed: supports(FAN_SPEED_MIN_GLADYS_VERSION),
   };
 }
 
