@@ -11,7 +11,6 @@ import {
 } from '@gladysassistant/integration-sdk';
 
 import { POLL_FREQUENCY } from '../config.js';
-import { DEFAULT_CAPABILITIES } from '../capabilities.js';
 
 export const DEVICE_TYPE = 'ata';
 
@@ -342,10 +341,9 @@ function getTemperatureBounds(unit) {
  * Build the Gladys discovery payload for one air-to-air unit.
  * @param {object} gladys - The SDK instance.
  * @param {object} unit - Air-to-air unit.
- * @param {object} [capabilities] - What the Gladys instance supports.
  * @returns {object} The Gladys device.
  */
-export function buildDevice(gladys, unit, capabilities = DEFAULT_CAPABILITIES) {
+export function buildDevice(gladys, unit) {
   const ids = gladys.externalIds(DEVICE_TYPE, unit.id);
   const { min, max } = getTemperatureBounds(unit);
   const device = {
@@ -408,10 +406,7 @@ export function buildDevice(gladys, unit, capabilities = DEFAULT_CAPABILITIES) {
     ],
   };
 
-  // Gladys < 4.84.2 does not know these feature types and rejects the WHOLE
-  // discovery payload when it meets one, so they are simply not offered there
-  // (see src/capabilities.js).
-  if (capabilities.fanSpeed && getSetting(unit, 'SetFanSpeed') !== undefined) {
+  if (getSetting(unit, 'SetFanSpeed') !== undefined) {
     device.features.push({
       name: 'Fan speed',
       external_id: ids.feature(FEATURE.FAN_SPEED),
@@ -424,10 +419,6 @@ export function buildDevice(gladys, unit, capabilities = DEFAULT_CAPABILITIES) {
       keep_history: true,
       supported_options: buildFanSpeedOptions(unit),
     });
-  }
-
-  if (!capabilities.swing) {
-    return device;
   }
 
   // Vanes are optional hardware: only the units that actually report a vane
