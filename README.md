@@ -19,9 +19,7 @@ Air-to-air units (air conditioners) are exposed with:
 - **Room temperature** — read-only
 - **Fan speed** — auto, or the speeds the unit reports (`numberOfFanSpeeds`)
 - **Vertical swing** and **Horizontal swing** — vane position, on the units that
-  have vanes. Requires Gladys 4.84.2+ (the version that introduced the air
-  conditioning swing feature types); on older versions the two controls are
-  simply not published.
+  have vanes
 
 Air-to-water units (Ecodan heat pumps) are supported too: power, zone-1 set
 point and room temperature, hot water tank set point, tank temperature, forced

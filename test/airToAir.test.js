@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 
 import { createFakeGladys } from './helpers/fakeGladys.js';
 
-import { buildCapabilities } from '../src/capabilities.js';
 import {
   buildDevice,
   readStates,
@@ -18,9 +17,6 @@ import {
 } from '../src/devices/airToAir.js';
 
 const gladys = createFakeGladys();
-
-// The vane features only exist on Gladys 4.84.2+ (see src/capabilities.js).
-const SWING = buildCapabilities('4.84.2');
 
 const buildUnit = (overrides = {}) => ({
   id: 'unit-1',
@@ -54,7 +50,7 @@ test('getSetting reads a value or undefined', () => {
   assert.equal(getSetting({}, 'Power'), undefined);
 });
 
-test('buildDevice maps unit to a Gladys device with 4 base features', () => {
+test('buildDevice maps a fully equipped unit to all seven features', () => {
   const device = buildDevice(gladys, buildUnit());
   assert.equal(device.name, 'Salon');
   assert.equal(device.external_id, 'ext:test:ata:unit-1');
@@ -63,7 +59,9 @@ test('buildDevice maps unit to a Gladys device with 4 base features', () => {
   // `poll_frequency` alone is inert: the Gladys scheduler polls the devices
   // flagged `should_poll`.
   assert.equal(device.should_poll, true);
-  assert.equal(device.features.length, 4);
+  // The fixture has a fan and both vanes: power, mode, target and room
+  // temperature, fan speed, and the two swings.
+  assert.equal(device.features.length, 7);
   const temp = device.features.find((f) => f.external_id.endsWith(':temperature'));
   assert.equal(temp.min, 8);
   assert.equal(temp.max, 31);
@@ -170,7 +168,7 @@ test('findUnitByExternalId matches by device external id', () => {
 // --- Vanes (swing) -----------------------------------------------------------
 
 test('buildDevice exposes both swing features when the unit reports vanes', () => {
-  const device = buildDevice(gladys, buildUnit(), SWING);
+  const device = buildDevice(gladys, buildUnit());
   const vertical = device.features.find((f) => f.external_id.endsWith(':swing-vertical'));
   const horizontal = device.features.find((f) => f.external_id.endsWith(':swing-horizontal'));
 
@@ -199,7 +197,7 @@ test('buildDevice omits a swing feature the unit does not report', () => {
       { name: 'VaneVerticalDirection', value: 'Auto' },
     ],
   });
-  const ids = buildDevice(gladys, unit, SWING).features.map((f) => f.external_id);
+  const ids = buildDevice(gladys, unit).features.map((f) => f.external_id);
   assert.ok(ids.some((id) => id.endsWith(':swing-vertical')));
   assert.ok(!ids.some((id) => id.endsWith(':swing-horizontal')));
 });
@@ -322,18 +320,10 @@ test('buildFullPayload normalizes vane codes to direction strings', () => {
   assert.equal(payload.vaneHorizontalDirection, 'Centre');
 });
 
-test('buildDevice publishes no swing feature to a Gladys that predates them', () => {
-  // Gladys < 4.84.2 rejects an unknown feature type and drops the WHOLE
-  // discovery payload with it, so the vanes must simply not be offered.
-  const device = buildDevice(gladys, buildUnit(), buildCapabilities('4.84.1'));
-  assert.equal(device.features.length, 4);
-  assert.ok(!device.features.some((f) => f.external_id.includes(':swing-')));
-});
-
 // --- Fan speed ---------------------------------------------------------------
 
 test('buildDevice exposes the fan speed with the unit own number of speeds', () => {
-  const device = buildDevice(gladys, buildUnit(), SWING);
+  const device = buildDevice(gladys, buildUnit());
   const fan = device.features.find((f) => f.external_id.endsWith(':fan-speed'));
   assert.equal(fan.type, 'fan-speed');
   assert.equal(fan.category, 'air-conditioning');
@@ -349,9 +339,7 @@ test('buildDevice exposes the fan speed with the unit own number of speeds', () 
 
 test('a unit with fewer speeds only offers the ones it has', () => {
   const unit = buildUnit({ capabilities: { numberOfFanSpeeds: 3 } });
-  const fan = buildDevice(gladys, unit, SWING).features.find((f) =>
-    f.external_id.endsWith(':fan-speed'),
-  );
+  const fan = buildDevice(gladys, unit).features.find((f) => f.external_id.endsWith(':fan-speed'));
   // Auto plus speeds 1-3, never a dead speed 4 or 5.
   assert.deepEqual(
     fan.supported_options.map((o) => o.value),
@@ -366,7 +354,7 @@ test('a unit with fewer speeds only offers the ones it has', () => {
 test('an absurd number of speeds is clamped to what MELCloud defines', () => {
   [0, -1, 99, null, 'x'].forEach((numberOfFanSpeeds) => {
     const unit = buildUnit({ capabilities: { numberOfFanSpeeds } });
-    const fan = buildDevice(gladys, unit, SWING).features.find((f) =>
+    const fan = buildDevice(gladys, unit).features.find((f) =>
       f.external_id.endsWith(':fan-speed'),
     );
     assert.equal(
@@ -379,13 +367,8 @@ test('an absurd number of speeds is clamped to what MELCloud defines', () => {
 
 test('buildDevice omits the fan speed on a unit that reports none', () => {
   const unit = buildUnit({ settings: [{ name: 'Power', value: 'True' }] });
-  const ids = buildDevice(gladys, unit, SWING).features.map((f) => f.external_id);
+  const ids = buildDevice(gladys, unit).features.map((f) => f.external_id);
   assert.ok(!ids.some((id) => id.endsWith(':fan-speed')));
-});
-
-test('buildDevice omits the fan speed on a Gladys that predates it', () => {
-  const device = buildDevice(gladys, buildUnit(), buildCapabilities('4.84.1'));
-  assert.ok(!device.features.some((f) => f.external_id.endsWith(':fan-speed')));
 });
 
 test('readStates maps the fan speed, including the integer code form', () => {
