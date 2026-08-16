@@ -30,6 +30,20 @@ test('the manifest declares no action', () => {
   assert.equal(manifest.actions, undefined);
 });
 
+test('declaring catalog categories requires Gladys >= 4.86.0', () => {
+  // The vocabulary is the store validator's business; what this pins is the
+  // coupling rule: older cores reject unknown manifest fields, so a manifest
+  // declaring `categories` must not claim compatibility below 4.86.0.
+  assert.ok(manifest.categories.length >= 1 && manifest.categories.length <= 3);
+  const minVersion = manifest.gladys_version.match(/>=\s*(\d+)\.(\d+)\.\d+/);
+  assert.ok(minVersion, 'gladys_version must declare a minimum version');
+  const [, major, minor] = minVersion.map(Number);
+  assert.ok(
+    major > 4 || (major === 4 && minor >= 86),
+    `categories requires gladys_version >= 4.86.0, got "${manifest.gladys_version}"`,
+  );
+});
+
 test('the credentials fields are required and the password is a secret', () => {
   assert.equal(field('email').required, true);
   assert.equal(field('password').type, 'secret');
