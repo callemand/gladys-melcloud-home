@@ -21,6 +21,13 @@ import { normalizeConfig } from './src/config.js';
 import { MELCloudHomeApi } from './src/melcloud-home-api.js';
 import { createDeviceRegistry } from './src/devices/index.js';
 import { createRealtimeClient } from './src/realtime.js';
+import {
+  REMOTE_WIDGET_KEY,
+  buildRemoteContent,
+  buildRemoteMessageContent,
+  createPendingStates,
+  planRemoteAction,
+} from './src/widgets/remote.js';
 
 const gladys = new GladysIntegration();
 const registry = createDeviceRegistry({ gladys });
@@ -35,6 +42,8 @@ const { version: VERSION } = JSON.parse(
 let config = normalizeConfig();
 // The MELCloud Home client, null until the credentials are known and valid.
 let api = null;
+// Values commanded from the remote control widget, until MELCloud reports them.
+const pendingStates = createPendingStates();
 
 /**
  * (Re)build the API client from the current config and check the connection.
@@ -135,6 +144,17 @@ async function refreshAllStates() {
       await gladys.publishStates(states);
     }
   }
+  refreshWidgets();
+}
+
+/**
+ * Ask Gladys to re-pull the remote control widgets: their status list is
+ * computed here, unlike the temperature tiles that follow the device states.
+ * Rate-limited by the core, and a no-op when no widget is open.
+ * @returns {void} Nothing.
+ */
+function refreshWidgets() {
+  gladys.requestWidgetRefresh(REMOTE_WIDGET_KEY);
 }
 
 const realtime = createRealtimeClient({
@@ -156,7 +176,61 @@ gladys.onSetValue(async (device, feature, value) => {
     throw new Error('MELCloud Home is not configured');
   }
   await registry.setValue(api, device, feature, value);
+  pendingStates.set(feature.external_id, value);
   await gladys.publishState(feature.external_id, value);
+  refreshWidgets();
+});
+
+// --- Remote control widget ---------------------------------------------------
+/**
+ * Find the air conditioner a widget instance is set to.
+ * @param {object} settings - The widget instance settings.
+ * @returns {Promise<{unit: object}|{reason: string}>} The unit, or why there is none.
+ */
+async function findWidgetUnit(settings) {
+  if (!api) {
+    return { reason: 'notConfigured' };
+  }
+  const match = await registry.findUnit(api, settings.unit);
+  if (!match) {
+    return { reason: 'notFound' };
+  }
+  if (match.blueprint.key !== 'ata') {
+    return { reason: 'notAnAirConditioner' };
+  }
+  return { unit: match.unit };
+}
+
+gladys.onWidgetGet(REMOTE_WIDGET_KEY, async ({ settings }) => {
+  const { unit, reason } = await findWidgetUnit(settings);
+  if (!unit) {
+    return buildRemoteMessageContent(reason);
+  }
+  return buildRemoteContent(gladys, unit, { settings, pending: pendingStates });
+});
+
+gladys.onWidgetAction(REMOTE_WIDGET_KEY, async (actionKey, params, { settings }) => {
+  const { unit, reason } = await findWidgetUnit(settings);
+  if (!unit) {
+    // Throw: the SDK sends a success:false acknowledgement to Gladys.
+    throw new Error(`Remote control unavailable: ${reason}`);
+  }
+  const { featureExternalId, value } = planRemoteAction(
+    gladys,
+    unit,
+    actionKey,
+    params,
+    pendingStates,
+  );
+  await registry.setValue(
+    api,
+    { external_id: settings.unit },
+    { external_id: featureExternalId },
+    value,
+  );
+  pendingStates.set(featureExternalId, value);
+  await gladys.publishState(featureExternalId, value);
+  // No refresh nudge: after a successful action the core re-pulls the content.
 });
 
 // --- Polling -----------------------------------------------------------------

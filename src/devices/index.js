@@ -62,6 +62,16 @@ export function createDeviceRegistry({
     blueprints,
 
     /**
+     * Find the unit behind a Gladys device external id.
+     * @param {object} api - The MELCloud Home client.
+     * @param {string} deviceExternalId - The device external id.
+     * @returns {Promise<{blueprint: object, unit: object}|null>} Match or null.
+     */
+    findUnit(api, deviceExternalId) {
+      return findBlueprintByDevice(api, { external_id: deviceExternalId });
+    },
+
+    /**
      * Drop the cached listings, so the next read hits MELCloud Home.
      * @returns {void} Nothing.
      */
