@@ -8,7 +8,7 @@
   },
   "version": "1.4.0",
   "docker_image": "ghcr.io/callemand/gladys-melcloud-home:1.4.0",
-  "gladys_version": ">=4.86.0",
+  "gladys_version": ">=5.1.0",
   "cover_image": "https://raw.githubusercontent.com/callemand/gladys-melcloud-home/main/cover.png",
   "categories": ["climate", "environment"],
   "transports": ["cloud"],
@@ -59,6 +59,102 @@
         "fr": "Le mot de passe de votre compte MELCloud Home (stocké chiffré)."
       },
       "required": true
+    }
+  ],
+  "widgets": [
+    {
+      "key": "remote",
+      "label": {
+        "en": "Remote control",
+        "fr": "Télécommande",
+        "de": "Fernbedienung",
+        "es": "Mando a distancia"
+      },
+      "description": {
+        "en": "Control an air conditioner like with its remote.",
+        "fr": "Pilotez une climatisation comme avec sa télécommande.",
+        "de": "Steuern Sie eine Klimaanlage wie mit ihrer Fernbedienung.",
+        "es": "Controle un aire acondicionado como con su mando."
+      },
+      "icon": "thermometer",
+      "settings": [
+        {
+          "key": "unit",
+          "type": "select",
+          "source": "devices",
+          "required": true,
+          "label": {
+            "en": "Air conditioner",
+            "fr": "Climatisation",
+            "de": "Klimaanlage",
+            "es": "Aire acondicionado"
+          }
+        },
+        {
+          "key": "button",
+          "type": "select",
+          "default": "mode",
+          "label": {
+            "en": "Fourth key",
+            "fr": "Quatrième touche",
+            "de": "Vierte Taste",
+            "es": "Cuarta tecla"
+          },
+          "description": {
+            "en": "Each tap moves the chosen setting to its next value.",
+            "fr": "Chaque appui passe le réglage choisi à sa valeur suivante.",
+            "de": "Jeder Druck stellt die gewählte Einstellung auf den nächsten Wert.",
+            "es": "Cada pulsación pasa el ajuste elegido a su siguiente valor."
+          },
+          "options": [
+            {
+              "value": "mode",
+              "label": {
+                "en": "Mode",
+                "fr": "Mode",
+                "de": "Modus",
+                "es": "Modo"
+              }
+            },
+            {
+              "value": "fan_speed",
+              "label": {
+                "en": "Fan speed",
+                "fr": "Ventilation",
+                "de": "Lüfterstufe",
+                "es": "Ventilador"
+              }
+            },
+            {
+              "value": "swing_vertical",
+              "label": {
+                "en": "Vertical swing",
+                "fr": "Balayage vertical",
+                "de": "Vertikal",
+                "es": "Oscilación vertical"
+              }
+            },
+            {
+              "value": "swing_horizontal",
+              "label": {
+                "en": "Horizontal swing",
+                "fr": "Balayage horizontal",
+                "de": "Horizontal",
+                "es": "Oscilación horizontal"
+              }
+            },
+            {
+              "value": "none",
+              "label": {
+                "en": "None",
+                "fr": "Aucune",
+                "de": "Keine",
+                "es": "Ninguna"
+              }
+            }
+          ]
+        }
+      ]
     }
   ]
 }
