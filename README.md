@@ -21,6 +21,9 @@ Air-to-air units (air conditioners) are exposed with:
 - **Vertical swing** and **Horizontal swing** — vane position, on the units that
   have vanes
 
+A **Remote control** dashboard widget drives one air conditioner: room and
+target temperatures, its state, and power, setpoint and stepping keys.
+
 Air-to-water units (Ecodan heat pumps) are supported too: power, zone-1 set
 point and room temperature, hot water tank set point, tank temperature, forced
 hot water and outdoor temperature. ERV (ventilation) units are ignored for now.

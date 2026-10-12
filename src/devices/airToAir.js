@@ -332,6 +332,29 @@ function toNumber(value) {
   return Number.isNaN(parsed) ? null : parsed;
 }
 
+/**
+ * Setpoint bounds of one operation mode: heating goes lower than cooling.
+ * Falls back on the bounds of every mode when the unit reports none for it.
+ * @param {object} unit - Air-to-air unit.
+ * @param {number} mode - The Gladys AC_MODE value.
+ * @returns {{min: number, max: number}} The bounds.
+ */
+export function getModeTemperatureBounds(unit, mode) {
+  const capabilities = unit.capabilities || {};
+  const byMode = {
+    [AC_MODE.HEATING]: [capabilities.minTempHeat, capabilities.maxTempHeat],
+    [AC_MODE.COOLING]: [capabilities.minTempCoolDry, capabilities.maxTempCoolDry],
+    [AC_MODE.DRYING]: [capabilities.minTempCoolDry, capabilities.maxTempCoolDry],
+    [AC_MODE.AUTO]: [capabilities.minTempAutomatic, capabilities.maxTempAutomatic],
+  };
+  const [min, max] = byMode[mode] || [];
+  const fallback = getTemperatureBounds(unit);
+  return {
+    min: typeof min === 'number' ? min : fallback.min,
+    max: typeof max === 'number' ? max : fallback.max,
+  };
+}
+
 function getTemperatureBounds(unit) {
   const capabilities = unit.capabilities || {};
   const mins = [

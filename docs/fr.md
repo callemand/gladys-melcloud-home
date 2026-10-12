@@ -41,6 +41,16 @@ donc déjà dans l'écran Découverte — lancez un scan pour rafraîchir la lis
 
 Créez celles que vous souhaitez piloter.
 
+## Widget télécommande
+
+Sur un tableau de bord, ajoutez le widget **Télécommande** et choisissez une
+climatisation. Il affiche les températures ambiante et de consigne, l'état
+(marche, mode, ventilation, balayage) et quatre touches : **Allumer /
+Éteindre**, **−** et **+** sur la consigne, et une quatrième touche à choisir
+dans les réglages du widget. Comme la touche MODE d'une télécommande, chaque
+appui passe le réglage choisi (mode, ventilation, balayage vertical ou
+horizontal) à sa valeur suivante.
+
 ## Remarques
 
 - Les unités air-air (climatisations) et air-eau (pompes à chaleur Ecodan) sont
