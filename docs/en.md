@@ -40,6 +40,15 @@ already listed in the Discovery screen — run a scan to refresh the list.
 
 Create the ones you want to control.
 
+## Remote control widget
+
+On a dashboard, add the **Remote control** widget and pick an air conditioner.
+It shows the room and target temperatures, the state (power, mode, fan speed,
+swing) and four keys: **Turn on / Turn off**, **−** and **+** on the setpoint,
+and a fourth key picked in the widget settings. Like the MODE key of a remote,
+each tap moves the chosen setting (mode, fan speed, vertical or horizontal
+swing) to its next value.
+
 ## Notes
 
 - Air-to-air (air conditioners) and air-to-water (Ecodan heat pumps) units are
