@@ -105,7 +105,7 @@ test('readStates publishes power, mode and temperatures', () => {
     },
     {
       device_feature_external_id: 'ext:test:ata:unit-1:swing-horizontal',
-      state: AC_SWING_HORIZONTAL.OFF,
+      state: AC_SWING_HORIZONTAL.AUTO,
     },
   ]);
 });
@@ -178,14 +178,18 @@ test('buildDevice exposes both swing features when the unit reports vanes', () =
     assert.equal(feature.category, 'air-conditioning');
     assert.equal(feature.read_only, false);
     assert.equal(feature.min, 0);
-    assert.equal(feature.max, 6);
-    // Gladys offers only the positions declared here instead of its full catalog.
-    assert.equal(feature.supported_options.length, 7);
+    assert.equal(feature.max, 8);
+    // Gladys offers only the positions declared here instead of its full catalog:
+    // Auto first, then swing and the five positions. Never OFF, which MELCloud lacks.
+    assert.deepEqual(
+      feature.supported_options.map((option) => option.value),
+      [8, 1, 2, 3, 4, 5, 6],
+    );
     feature.supported_options.forEach((option, index) => {
-      assert.equal(option.value, index);
       assert.equal(option.sort_order, index);
       assert.ok(option.label.length > 0);
     });
+    assert.equal(feature.supported_options[0].label, 'Auto');
   });
   assert.equal(horizontal.supported_options[2].label, 'Left');
 });
@@ -218,7 +222,7 @@ test('readStates maps the vane directions to the Gladys swing values', () => {
   assert.equal(byId['ext:test:ata:unit-1:swing-horizontal'], AC_SWING_HORIZONTAL.POSITION_3);
 });
 
-test('readStates maps "Auto" onto the off slot Gladys imposes', () => {
+test('readStates maps "Auto" onto the Gladys AUTO swing value', () => {
   const states = readStates(
     gladys,
     buildUnit({
@@ -230,8 +234,8 @@ test('readStates maps "Auto" onto the off slot Gladys imposes', () => {
     }),
   );
   const byId = Object.fromEntries(states.map((s) => [s.device_feature_external_id, s.state]));
-  assert.equal(byId['ext:test:ata:unit-1:swing-vertical'], AC_SWING_VERTICAL.OFF);
-  assert.equal(byId['ext:test:ata:unit-1:swing-horizontal'], AC_SWING_HORIZONTAL.OFF);
+  assert.equal(byId['ext:test:ata:unit-1:swing-vertical'], AC_SWING_VERTICAL.AUTO);
+  assert.equal(byId['ext:test:ata:unit-1:swing-horizontal'], AC_SWING_HORIZONTAL.AUTO);
 });
 
 test('readStates also accepts the integer vane codes', () => {
@@ -281,7 +285,8 @@ test('buildSetPayload sends the vane direction and preserves the rest', () => {
 
 test('buildSetPayload maps every swing value both ways', () => {
   const unit = buildUnit();
-  Object.values(AC_SWING_VERTICAL).forEach((value) => {
+  const published = (values) => Object.values(values).filter((value) => value !== 0);
+  published(AC_SWING_VERTICAL).forEach((value) => {
     const payload = buildSetPayload(gladys, unit, 'ext:test:ata:unit-1:swing-vertical', value);
     assert.ok(payload, `vertical ${value} is writable`);
     assert.equal(
@@ -293,10 +298,18 @@ test('buildSetPayload maps every swing value both ways', () => {
       `vertical ${value} round-trips`,
     );
   });
-  Object.values(AC_SWING_HORIZONTAL).forEach((value) => {
+  published(AC_SWING_HORIZONTAL).forEach((value) => {
     const payload = buildSetPayload(gladys, unit, 'ext:test:ata:unit-1:swing-horizontal', value);
     assert.ok(payload, `horizontal ${value} is writable`);
   });
+});
+
+test('buildSetPayload still reads OFF as Auto, for scenes saved before AUTO existed', () => {
+  const unit = buildUnit();
+  const vertical = buildSetPayload(gladys, unit, 'ext:test:ata:unit-1:swing-vertical', 0);
+  const horizontal = buildSetPayload(gladys, unit, 'ext:test:ata:unit-1:swing-horizontal', 0);
+  assert.equal(vertical.vaneVerticalDirection, 'Auto');
+  assert.equal(horizontal.vaneHorizontalDirection, 'Auto');
 });
 
 test('buildSetPayload rejects a swing value outside the mapping', () => {
