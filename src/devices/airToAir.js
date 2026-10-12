@@ -69,10 +69,10 @@ const MODE_TO_MELCLOUD = {
 
 // --- Vanes (swing) -----------------------------------------------------------
 // Gladys swing values (mirrors the core AC_SWING_* constants; the SDK does not
-// export them). Gladys imposes a fixed vocabulary — off / swing / position 1-5 —
-// so MELCloud's "Auto" lands on the OFF slot: it is the only one that means
-// "neither swinging nor pinned to a position". The Gladys UI labels that slot
-// "off" whatever label we publish alongside it.
+// export them). MELCloud's "Auto" is the core AUTO value: the unit picks the
+// direction itself. Before that value existed it was mapped on OFF, so OFF is
+// still accepted as an alias of Auto in commands (scenes saved back then), but
+// never published.
 export const AC_SWING_VERTICAL = {
   OFF: 0,
   SWING: 1,
@@ -81,6 +81,7 @@ export const AC_SWING_VERTICAL = {
   POSITION_3: 4,
   POSITION_4: 5,
   POSITION_5: 6,
+  AUTO: 8,
 };
 
 export const AC_SWING_HORIZONTAL = {
@@ -91,6 +92,7 @@ export const AC_SWING_HORIZONTAL = {
   POSITION_3: 4,
   POSITION_4: 5,
   POSITION_5: 6,
+  AUTO: 8,
 };
 
 // MELCloud Home vane directions. `/context` reports them as these strings; the
@@ -142,7 +144,7 @@ const VANE_HORIZONTAL_BY_CODE = {
 };
 
 const SWING_VERTICAL_TO_GLADYS = {
-  [VANE_VERTICAL.AUTO]: AC_SWING_VERTICAL.OFF,
+  [VANE_VERTICAL.AUTO]: AC_SWING_VERTICAL.AUTO,
   [VANE_VERTICAL.SWING]: AC_SWING_VERTICAL.SWING,
   [VANE_VERTICAL.ONE]: AC_SWING_VERTICAL.POSITION_1,
   [VANE_VERTICAL.TWO]: AC_SWING_VERTICAL.POSITION_2,
@@ -152,7 +154,7 @@ const SWING_VERTICAL_TO_GLADYS = {
 };
 
 const SWING_HORIZONTAL_TO_GLADYS = {
-  [VANE_HORIZONTAL.AUTO]: AC_SWING_HORIZONTAL.OFF,
+  [VANE_HORIZONTAL.AUTO]: AC_SWING_HORIZONTAL.AUTO,
   [VANE_HORIZONTAL.SWING]: AC_SWING_HORIZONTAL.SWING,
   [VANE_HORIZONTAL.LEFT]: AC_SWING_HORIZONTAL.POSITION_1,
   [VANE_HORIZONTAL.LEFT_CENTRE]: AC_SWING_HORIZONTAL.POSITION_2,
@@ -164,13 +166,21 @@ const SWING_HORIZONTAL_TO_GLADYS = {
 const invert = (map) =>
   Object.fromEntries(Object.entries(map).map(([melcloud, gladys]) => [gladys, melcloud]));
 
-const SWING_VERTICAL_TO_MELCLOUD = invert(SWING_VERTICAL_TO_GLADYS);
-const SWING_HORIZONTAL_TO_MELCLOUD = invert(SWING_HORIZONTAL_TO_GLADYS);
+const SWING_VERTICAL_TO_MELCLOUD = {
+  ...invert(SWING_VERTICAL_TO_GLADYS),
+  [AC_SWING_VERTICAL.OFF]: VANE_VERTICAL.AUTO,
+};
+const SWING_HORIZONTAL_TO_MELCLOUD = {
+  ...invert(SWING_HORIZONTAL_TO_GLADYS),
+  [AC_SWING_HORIZONTAL.OFF]: VANE_HORIZONTAL.AUTO,
+};
 
 // The label is only a fallback in the Gladys UI (the static i18n key wins when
-// there is one), but it documents what each slot really drives on the unit.
+// there is one): it is what a core without the AUTO translation displays.
+// Integer keys iterate in ascending order, so buildSwingOptions moves Auto
+// (the highest value) back to the top of the list, where the remote has it.
 const SWING_VERTICAL_LABELS = {
-  [AC_SWING_VERTICAL.OFF]: 'Auto',
+  [AC_SWING_VERTICAL.AUTO]: 'Auto',
   [AC_SWING_VERTICAL.SWING]: 'Swing',
   [AC_SWING_VERTICAL.POSITION_1]: 'Position 1',
   [AC_SWING_VERTICAL.POSITION_2]: 'Position 2',
@@ -180,7 +190,7 @@ const SWING_VERTICAL_LABELS = {
 };
 
 const SWING_HORIZONTAL_LABELS = {
-  [AC_SWING_HORIZONTAL.OFF]: 'Auto',
+  [AC_SWING_HORIZONTAL.AUTO]: 'Auto',
   [AC_SWING_HORIZONTAL.SWING]: 'Swing',
   [AC_SWING_HORIZONTAL.POSITION_1]: 'Left',
   [AC_SWING_HORIZONTAL.POSITION_2]: 'Left centre',
@@ -290,14 +300,17 @@ function toEnumSetting(value, byCode) {
  * Build the `supported_options` of a swing feature: Gladys then offers only
  * these positions instead of its full static catalog.
  * @param {object} labels - Label by Gladys value.
+ * @param {number} auto - The Gladys AUTO value, listed first.
  * @returns {Array} The supported options.
  */
-function buildSwingOptions(labels) {
-  return Object.entries(labels).map(([value, label], index) => ({
-    value: Number(value),
-    label,
-    sort_order: index,
-  }));
+function buildSwingOptions(labels, auto) {
+  const values = [
+    auto,
+    ...Object.keys(labels)
+      .map(Number)
+      .filter((value) => value !== auto),
+  ];
+  return values.map((value, index) => ({ value, label: labels[value], sort_order: index }));
 }
 
 /**
@@ -430,11 +443,11 @@ export function buildDevice(gladys, unit) {
       category: DEVICE_FEATURE_CATEGORIES.AIR_CONDITIONING,
       type: SWING_FEATURE_TYPE.VERTICAL,
       min: AC_SWING_VERTICAL.OFF,
-      max: AC_SWING_VERTICAL.POSITION_5,
+      max: AC_SWING_VERTICAL.AUTO,
       read_only: false,
       has_feedback: true,
       keep_history: true,
-      supported_options: buildSwingOptions(SWING_VERTICAL_LABELS),
+      supported_options: buildSwingOptions(SWING_VERTICAL_LABELS, AC_SWING_VERTICAL.AUTO),
     });
   }
 
@@ -445,11 +458,11 @@ export function buildDevice(gladys, unit) {
       category: DEVICE_FEATURE_CATEGORIES.AIR_CONDITIONING,
       type: SWING_FEATURE_TYPE.HORIZONTAL,
       min: AC_SWING_HORIZONTAL.OFF,
-      max: AC_SWING_HORIZONTAL.POSITION_5,
+      max: AC_SWING_HORIZONTAL.AUTO,
       read_only: false,
       has_feedback: true,
       keep_history: true,
-      supported_options: buildSwingOptions(SWING_HORIZONTAL_LABELS),
+      supported_options: buildSwingOptions(SWING_HORIZONTAL_LABELS, AC_SWING_HORIZONTAL.AUTO),
     });
   }
 
