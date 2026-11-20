@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createFakeGladys } from './helpers/fakeGladys.js';
-import { createDeviceRegistry, DEVICE_BLUEPRINTS } from '../src/devices/index.js';
+import { COMMAND_SPACING, createDeviceRegistry, DEVICE_BLUEPRINTS } from '../src/devices/index.js';
 import { createUnitCache } from '../src/devices/unitCache.js';
 
 // A fake MELCloud Home client counting its calls, so the tests can assert how
@@ -54,8 +54,15 @@ const atwUnit = (id = 'pump-1') => ({
 const setup = (units, cacheOptions) => {
   const gladys = createFakeGladys();
   const api = createFakeApi(units);
-  const registry = createDeviceRegistry({ gladys, cache: createUnitCache(cacheOptions) });
-  return { gladys, api, registry };
+  const sleeps = [];
+  const registry = createDeviceRegistry({
+    gladys,
+    cache: createUnitCache(cacheOptions),
+    sleep: async (ms) => {
+      sleeps.push({ ms, commandsSent: api.calls.setAta.length });
+    },
+  });
+  return { gladys, api, registry, sleeps };
 };
 
 test('the registry serves both device families', () => {
@@ -166,20 +173,67 @@ test('setValue rejects an unknown device and a read-only feature', async () => {
 });
 
 test('setValues sends several changes as one command, then invalidates the cache', async () => {
-  const { api, registry } = setup({ ata: [ataUnit('a')] });
+  const { api, registry, sleeps } = setup({ ata: [ataUnit('a')] });
   await registry.readStates(api, { external_id: 'ext:test:ata:a' });
 
-  await registry.setValues(api, { external_id: 'ext:test:ata:a' }, [
-    { featureExternalId: 'ext:test:ata:a:power', value: 0 },
+  const reported = await registry.setValues(api, { external_id: 'ext:test:ata:a' }, [
+    { featureExternalId: 'ext:test:ata:a:mode', value: 2 },
     { featureExternalId: 'ext:test:ata:a:temperature', value: 23 },
   ]);
   assert.equal(api.calls.setAta.length, 1);
   assert.equal(api.calls.setAta[0].unitId, 'a');
-  assert.equal(api.calls.setAta[0].payload.power, false);
+  assert.equal(api.calls.setAta[0].payload.operationMode, 'Heat');
   assert.equal(api.calls.setAta[0].payload.setTemperature, 23);
+  // Power is not part of the change: it stays null, the unit keeps its state.
+  assert.equal(api.calls.setAta[0].payload.power, null);
+  assert.deepEqual(sleeps, []);
+
+  // The states read before the command, for the pending values.
+  assert.equal(
+    reported.find((state) => state.device_feature_external_id === 'ext:test:ata:a:temperature')
+      .state,
+    21,
+  );
 
   await registry.readStates(api, { external_id: 'ext:test:ata:a' });
   assert.equal(api.calls.listAta, 2, 'the post-command poll must not be served from the cache');
+});
+
+test('setValues sends the two vane axes as two commands, spaced', async () => {
+  const { api, registry, sleeps } = setup({ ata: [ataUnit('a')] });
+
+  await registry.setValues(api, { external_id: 'ext:test:ata:a' }, [
+    { featureExternalId: 'ext:test:ata:a:swing-vertical', value: 1 },
+    { featureExternalId: 'ext:test:ata:a:swing-horizontal', value: 8 },
+  ]);
+  assert.deepEqual(
+    api.calls.setAta.map(({ payload }) => [
+      payload.vaneVerticalDirection,
+      payload.vaneHorizontalDirection,
+    ]),
+    [
+      ['Swing', null],
+      [null, 'Auto'],
+    ],
+  );
+  // One pause, between the two commands.
+  assert.deepEqual(sleeps, [{ ms: COMMAND_SPACING, commandsSent: 1 }]);
+});
+
+test('setValue returns the states read before the command', async () => {
+  const { api, registry } = setup({ ata: [ataUnit('a')] });
+  const reported = await registry.setValue(
+    api,
+    { external_id: 'ext:test:ata:a' },
+    { external_id: 'ext:test:ata:a:power' },
+    0,
+  );
+  assert.equal(
+    reported.find((state) => state.device_feature_external_id === 'ext:test:ata:a:power').state,
+    1,
+  );
+  assert.equal(api.calls.setAta[0].payload.power, false);
+  assert.equal(api.calls.setAta[0].payload.operationMode, null);
 });
 
 test('setValues rejects an unknown device, an unwritable change and a family without it', async () => {

@@ -6,9 +6,9 @@ import { createFakeGladys } from './helpers/fakeGladys.js';
 import {
   buildDevice,
   readStates,
-  buildFullPayload,
+  buildNullPayload,
   buildSetPayload,
-  buildChangesPayload,
+  buildChangesPayloads,
   getSetting,
   findUnitByExternalId,
   AC_MODE,
@@ -126,56 +126,81 @@ test('readStates skips an unknown mode and non-numeric temperatures', () => {
   assert.deepEqual(states, [{ device_feature_external_id: 'ext:test:ata:unit-1:power', state: 0 }]);
 });
 
-test('buildFullPayload reflects the current state', () => {
-  assert.deepEqual(buildFullPayload(buildUnit()), {
-    power: true,
-    operationMode: 'Cool',
-    setTemperature: 21,
-    setFanSpeed: 'Four',
-    vaneVerticalDirection: 'Swing',
-    vaneHorizontalDirection: 'Auto',
+test('buildNullPayload changes nothing: every control field is null', () => {
+  assert.deepEqual(buildNullPayload(), {
+    power: null,
+    operationMode: null,
+    setFanSpeed: null,
+    vaneHorizontalDirection: null,
+    vaneVerticalDirection: null,
+    setTemperature: null,
     temperatureIncrementOverride: null,
-    inStandbyMode: false,
+    inStandbyMode: null,
   });
 });
 
-test('buildChangesPayload merges several changes into one full payload', () => {
+test('buildSetPayload sets the changed field only, never the current state', () => {
   const unit = buildUnit();
-  const payload = buildChangesPayload(gladys, unit, [
-    { featureExternalId: 'ext:test:ata:unit-1:mode', value: AC_MODE.HEATING },
-    { featureExternalId: 'ext:test:ata:unit-1:swing-vertical', value: AC_SWING_VERTICAL.AUTO },
-  ]);
-  assert.equal(payload.operationMode, 'Heat');
-  assert.equal(payload.vaneVerticalDirection, 'Auto');
-  // The rest is the current state, untouched.
-  assert.equal(payload.power, true);
-  assert.equal(payload.setTemperature, 21);
-  assert.equal(payload.vaneHorizontalDirection, 'Auto');
+  // Off: power alone, the mode is not echoed back.
+  assert.deepEqual(buildSetPayload(gladys, unit, 'ext:test:ata:unit-1:power', 0), {
+    ...buildNullPayload(),
+    power: false,
+  });
+
+  // A mode change never carries `power`: it cannot switch an off unit on.
+  const mode = buildSetPayload(gladys, unit, 'ext:test:ata:unit-1:mode', AC_MODE.HEATING);
+  assert.deepEqual(mode, { ...buildNullPayload(), operationMode: 'Heat' });
+
+  const temp = buildSetPayload(gladys, unit, 'ext:test:ata:unit-1:temperature', 22);
+  assert.deepEqual(temp, { ...buildNullPayload(), setTemperature: 22 });
 });
 
-test('buildChangesPayload refuses an empty or a partly unwritable change list', () => {
+test('buildChangesPayloads puts several changes in one payload', () => {
+  const payloads = buildChangesPayloads(gladys, buildUnit(), [
+    { featureExternalId: 'ext:test:ata:unit-1:mode', value: AC_MODE.HEATING },
+    { featureExternalId: 'ext:test:ata:unit-1:fan-speed', value: AC_FAN_SPEED.AUTO },
+    { featureExternalId: 'ext:test:ata:unit-1:swing-vertical', value: AC_SWING_VERTICAL.AUTO },
+  ]);
+  assert.deepEqual(payloads, [
+    {
+      ...buildNullPayload(),
+      operationMode: 'Heat',
+      setFanSpeed: 'Auto',
+      vaneVerticalDirection: 'Auto',
+    },
+  ]);
+});
+
+test('buildChangesPayloads never sends both vane axes in one payload', () => {
+  const payloads = buildChangesPayloads(gladys, buildUnit(), [
+    { featureExternalId: 'ext:test:ata:unit-1:swing-horizontal', value: AC_SWING_HORIZONTAL.SWING },
+    { featureExternalId: 'ext:test:ata:unit-1:mode', value: AC_MODE.COOLING },
+    { featureExternalId: 'ext:test:ata:unit-1:swing-vertical', value: AC_SWING_VERTICAL.SWING },
+  ]);
+  assert.deepEqual(payloads, [
+    { ...buildNullPayload(), operationMode: 'Cool', vaneVerticalDirection: 'Swing' },
+    { ...buildNullPayload(), vaneHorizontalDirection: 'Swing' },
+  ]);
+
+  // The horizontal axis alone shares the payload of the other changes.
+  const horizontalOnly = buildChangesPayloads(gladys, buildUnit(), [
+    { featureExternalId: 'ext:test:ata:unit-1:mode', value: AC_MODE.COOLING },
+    { featureExternalId: 'ext:test:ata:unit-1:swing-horizontal', value: AC_SWING_HORIZONTAL.AUTO },
+  ]);
+  assert.equal(horizontalOnly.length, 1);
+  assert.equal(horizontalOnly[0].vaneHorizontalDirection, 'Auto');
+});
+
+test('buildChangesPayloads refuses an empty or a partly unwritable change list', () => {
   const unit = buildUnit();
-  assert.equal(buildChangesPayload(gladys, unit, []), null);
+  assert.equal(buildChangesPayloads(gladys, unit, []), null);
   assert.equal(
-    buildChangesPayload(gladys, unit, [
+    buildChangesPayloads(gladys, unit, [
       { featureExternalId: 'ext:test:ata:unit-1:power', value: 0 },
       { featureExternalId: 'ext:test:ata:unit-1:room-temperature', value: 20 },
     ]),
     null,
   );
-});
-
-test('buildSetPayload merges the change onto the full state', () => {
-  const unit = buildUnit();
-  const power = buildSetPayload(gladys, unit, 'ext:test:ata:unit-1:power', 0);
-  assert.equal(power.power, false);
-  assert.equal(power.operationMode, 'Cool'); // preserved
-
-  const mode = buildSetPayload(gladys, unit, 'ext:test:ata:unit-1:mode', AC_MODE.HEATING);
-  assert.equal(mode.operationMode, 'Heat');
-
-  const temp = buildSetPayload(gladys, unit, 'ext:test:ata:unit-1:temperature', 22);
-  assert.equal(temp.setTemperature, 22);
 });
 
 test('buildSetPayload returns null for a read-only feature', () => {
@@ -297,17 +322,17 @@ test('readStates skips an unknown vane direction', () => {
   assert.ok(!ids.includes('ext:test:ata:unit-1:swing-vertical'));
 });
 
-test('buildSetPayload sends the vane direction and preserves the rest', () => {
+test('buildSetPayload sends one vane axis and leaves the other one null', () => {
   const unit = buildUnit();
 
   const vertical = buildSetPayload(gladys, unit, 'ext:test:ata:unit-1:swing-vertical', 4);
   assert.equal(vertical.vaneVerticalDirection, 'Three');
-  assert.equal(vertical.vaneHorizontalDirection, 'Auto'); // untouched
-  assert.equal(vertical.operationMode, 'Cool');
+  assert.equal(vertical.vaneHorizontalDirection, null);
+  assert.equal(vertical.operationMode, null);
 
   const horizontal = buildSetPayload(gladys, unit, 'ext:test:ata:unit-1:swing-horizontal', 1);
   assert.equal(horizontal.vaneHorizontalDirection, 'Swing');
-  assert.equal(horizontal.vaneVerticalDirection, 'Swing'); // the unit's current value
+  assert.equal(horizontal.vaneVerticalDirection, null);
 });
 
 test('buildSetPayload maps every swing value both ways', () => {
@@ -344,20 +369,6 @@ test('buildSetPayload rejects a swing value outside the mapping', () => {
     buildSetPayload(gladys, buildUnit(), 'ext:test:ata:unit-1:swing-vertical', 99),
     null,
   );
-});
-
-test('buildFullPayload normalizes vane codes to direction strings', () => {
-  const payload = buildFullPayload(
-    buildUnit({
-      settings: [
-        { name: 'Power', value: 'True' },
-        { name: 'VaneVerticalDirection', value: 6 },
-        { name: 'VaneHorizontalDirection', value: 3 },
-      ],
-    }),
-  );
-  assert.equal(payload.vaneVerticalDirection, 'Swing');
-  assert.equal(payload.vaneHorizontalDirection, 'Centre');
 });
 
 // --- Fan speed ---------------------------------------------------------------
@@ -440,16 +451,11 @@ test('buildSetPayload round-trips every fan speed', () => {
   });
 });
 
-test('buildSetPayload preserves the rest of the state and rejects an unknown speed', () => {
+test('buildSetPayload sends the speed alone and rejects an unknown speed', () => {
   const unit = buildUnit();
   const payload = buildSetPayload(gladys, unit, 'ext:test:ata:unit-1:fan-speed', AC_FAN_SPEED.LOW);
   assert.equal(payload.setFanSpeed, 'One');
-  assert.equal(payload.operationMode, 'Cool');
-  assert.equal(payload.setTemperature, 21);
+  assert.equal(payload.operationMode, null);
+  assert.equal(payload.setTemperature, null);
   assert.equal(buildSetPayload(gladys, unit, 'ext:test:ata:unit-1:fan-speed', 99), null);
-});
-
-test('buildFullPayload normalizes a fan speed code to its string', () => {
-  const payload = buildFullPayload(buildUnit({ settings: [{ name: 'SetFanSpeed', value: 2 }] }));
-  assert.equal(payload.setFanSpeed, 'Two');
 });
