@@ -21,6 +21,7 @@ import { normalizeConfig } from './src/config.js';
 import { MELCloudHomeApi } from './src/melcloud-home-api.js';
 import { createDeviceRegistry } from './src/devices/index.js';
 import { createRealtimeClient } from './src/realtime.js';
+import { createInitGate } from './src/initGate.js';
 import { createPendingStates } from './src/pendingStates.js';
 import { createWidgetRefresher } from './src/widgetRefresh.js';
 import {
@@ -43,6 +44,11 @@ const { version: VERSION } = JSON.parse(
 let config = normalizeConfig();
 // The MELCloud Home client, null until the credentials are known and valid.
 let api = null;
+// Why `api` is null, for the widget: 'starting', 'notConfigured' or
+// 'connectionFailed'.
+let apiProblem = 'starting';
+// Requests landing while the client is (re)built wait for it (see src/initGate.js).
+const initGate = createInitGate();
 // Values commanded to the units, until MELCloud reports them: every state
 // published from a MELCloud read goes through it (see src/pendingStates.js).
 const pendingStates = createPendingStates();
@@ -66,13 +72,26 @@ function rememberCommands(reportedStates, changes) {
  * (Re)build the API client from the current config and check the connection.
  * @returns {Promise<void>} Nothing.
  */
-async function initApi() {
+function initApi() {
+  return initGate.run(buildApi);
+}
+
+/**
+ * Build the API client from the current config and check the connection.
+ * @returns {Promise<void>} Nothing.
+ */
+async function buildApi() {
+  // No request sees a client before its login succeeded, nor the previous
+  // account's client: they wait for the gate meanwhile.
+  api = null;
+  apiProblem = 'starting';
   config = normalizeConfig(await gladys.getConfig());
   // The previous account's units must not survive a credentials change.
   registry.invalidate();
 
   if (!config.email || !config.password) {
     api = null;
+    apiProblem = 'notConfigured';
     await gladys.setConnectionStatus(false, {
       en: 'Enter your MELCloud Home email and password.',
       fr: 'Renseignez votre email et mot de passe MELCloud Home.',
@@ -80,7 +99,7 @@ async function initApi() {
     return;
   }
 
-  api = new MELCloudHomeApi({
+  const client = new MELCloudHomeApi({
     email: config.email,
     password: config.password,
     refreshToken: config.melcloud_refresh_token,
@@ -88,11 +107,13 @@ async function initApi() {
   });
 
   try {
-    await api.getAccessToken();
+    await client.getAccessToken();
+    api = client;
+    apiProblem = null;
     await gladys.setConnectionStatus(true);
     logger.info(`Connected to MELCloud Home (integration v${VERSION})`);
   } catch (e) {
-    api = null;
+    apiProblem = 'connectionFailed';
     logger.error('MELCloud Home connection failed:', e.message);
     await gladys.setConnectionStatus(false, {
       en: 'Login failed, please check your credentials.',
@@ -194,6 +215,7 @@ gladys.onScanRequest(async () => {
 
 // --- Command -----------------------------------------------------------------
 gladys.onSetValue(async (device, feature, value) => {
+  await initGate.wait();
   if (!api) {
     // Throw: the SDK sends a success:false acknowledgement to Gladys.
     throw new Error('MELCloud Home is not configured');
@@ -211,8 +233,9 @@ gladys.onSetValue(async (device, feature, value) => {
  * @returns {Promise<{unit: object}|{reason: string}>} The unit, or why there is none.
  */
 async function findWidgetUnit(settings) {
+  await initGate.wait();
   if (!api) {
-    return { reason: 'notConfigured' };
+    return { reason: apiProblem || 'notConfigured' };
   }
   const match = await registry.findUnit(api, settings.unit);
   if (!match) {
