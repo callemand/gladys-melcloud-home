@@ -135,5 +135,31 @@ export function createDeviceRegistry({
       // next poll reads what the unit actually did with the command.
       cache.invalidate();
     },
+
+    /**
+     * Send several feature changes of one unit to MELCloud Home, as ONE
+     * command: each command carries the whole state, so sending them one by
+     * one would undo the previous change until the unit reports it back.
+     * Only the families whose module builds such a payload accept it.
+     * @param {object} api - The MELCloud Home client.
+     * @param {object} device - The Gladys device.
+     * @param {Array<{featureExternalId: string, value: number}>} changes - The changes.
+     * @returns {Promise<void>} Nothing.
+     */
+    async setValues(api, device, changes) {
+      const match = await findBlueprintByDevice(api, device);
+      if (!match) {
+        throw new Error(`MELCloud Home unit not found for ${device.external_id}`);
+      }
+      const { module } = match.blueprint;
+      const payload = module.buildChangesPayload
+        ? module.buildChangesPayload(gladys, match.unit, changes)
+        : null;
+      if (!payload) {
+        throw new Error(`MELCloud Home changes are not writable on ${device.external_id}`);
+      }
+      await match.blueprint.setUnit(api, match.unit.id, payload);
+      cache.invalidate();
+    },
   };
 }

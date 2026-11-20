@@ -40,14 +40,17 @@ already listed in the Discovery screen — run a scan to refresh the list.
 
 Create the ones you want to control.
 
-## Remote control widget
+## MELCloud heat pump widget
 
-On a dashboard, add the **Remote control** widget and pick an air conditioner.
-It shows the room and target temperatures, the state (power, mode, fan speed,
-swing) and four keys: **Turn on / Turn off**, **−** and **+** on the setpoint,
-and a fourth key picked in the widget settings. Like the MODE key of a remote,
-each tap moves the chosen setting (mode, fan speed, vertical or horizontal
-swing) to its next value.
+On a dashboard, add the **MELCloud heat pump** widget and pick an air-to-air
+unit. It shows:
+
+- the room and target temperatures, and their 24 h curve (the **Chart**
+  setting of the widget hides it);
+- the state: power, mode, fan speed, vertical and horizontal swing;
+- four buttons: **Turn on / Turn off**, **−** and **+** on the setpoint (by
+  0.5 °C when the unit allows it), and **Settings**, which opens a form to
+  change the mode, the fan speed and both swings at once.
 
 ## Notes
 

@@ -8,6 +8,7 @@ import {
   readStates,
   buildFullPayload,
   buildSetPayload,
+  buildChangesPayload,
   getSetting,
   findUnitByExternalId,
   AC_MODE,
@@ -164,6 +165,32 @@ test('buildFullPayload reflects the current state', () => {
     temperatureIncrementOverride: null,
     inStandbyMode: false,
   });
+});
+
+test('buildChangesPayload merges several changes into one full payload', () => {
+  const unit = buildUnit();
+  const payload = buildChangesPayload(gladys, unit, [
+    { featureExternalId: 'ext:test:ata:unit-1:mode', value: AC_MODE.HEATING },
+    { featureExternalId: 'ext:test:ata:unit-1:swing-vertical', value: AC_SWING_VERTICAL.AUTO },
+  ]);
+  assert.equal(payload.operationMode, 'Heat');
+  assert.equal(payload.vaneVerticalDirection, 'Auto');
+  // The rest is the current state, untouched.
+  assert.equal(payload.power, true);
+  assert.equal(payload.setTemperature, 21);
+  assert.equal(payload.vaneHorizontalDirection, 'Auto');
+});
+
+test('buildChangesPayload refuses an empty or a partly unwritable change list', () => {
+  const unit = buildUnit();
+  assert.equal(buildChangesPayload(gladys, unit, []), null);
+  assert.equal(
+    buildChangesPayload(gladys, unit, [
+      { featureExternalId: 'ext:test:ata:unit-1:power', value: 0 },
+      { featureExternalId: 'ext:test:ata:unit-1:room-temperature', value: 20 },
+    ]),
+    null,
+  );
 });
 
 test('buildSetPayload merges the change onto the full state', () => {

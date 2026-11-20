@@ -165,6 +165,48 @@ test('setValue rejects an unknown device and a read-only feature', async () => {
   );
 });
 
+test('setValues sends several changes as one command, then invalidates the cache', async () => {
+  const { api, registry } = setup({ ata: [ataUnit('a')] });
+  await registry.readStates(api, { external_id: 'ext:test:ata:a' });
+
+  await registry.setValues(api, { external_id: 'ext:test:ata:a' }, [
+    { featureExternalId: 'ext:test:ata:a:power', value: 0 },
+    { featureExternalId: 'ext:test:ata:a:temperature', value: 23 },
+  ]);
+  assert.equal(api.calls.setAta.length, 1);
+  assert.equal(api.calls.setAta[0].unitId, 'a');
+  assert.equal(api.calls.setAta[0].payload.power, false);
+  assert.equal(api.calls.setAta[0].payload.setTemperature, 23);
+
+  await registry.readStates(api, { external_id: 'ext:test:ata:a' });
+  assert.equal(api.calls.listAta, 2, 'the post-command poll must not be served from the cache');
+});
+
+test('setValues rejects an unknown device, an unwritable change and a family without it', async () => {
+  const { api, registry } = setup({ ata: [ataUnit('a')], atw: [atwUnit('p')] });
+  const change = (featureExternalId) => [{ featureExternalId, value: 1 }];
+
+  await assert.rejects(
+    () => registry.setValues(api, { external_id: 'ext:test:ata:gone' }, change('x')),
+    /unit not found/,
+  );
+  await assert.rejects(
+    () =>
+      registry.setValues(
+        api,
+        { external_id: 'ext:test:ata:a' },
+        change('ext:test:ata:a:room-temperature'),
+      ),
+    /not writable/,
+  );
+  await assert.rejects(
+    () =>
+      registry.setValues(api, { external_id: 'ext:test:atw:p' }, change('ext:test:atw:p:power')),
+    /not writable/,
+  );
+  assert.equal(api.calls.setAta.length + api.calls.setAtw.length, 0);
+});
+
 test('invalidate forces the next read to hit MELCloud Home', async () => {
   const { api, registry } = setup({ ata: [ataUnit('a')] });
 
