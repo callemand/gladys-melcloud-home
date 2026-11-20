@@ -52,7 +52,7 @@ const LABELS = {
   ),
   state: text('State', 'État', 'Zustand', 'Estado'),
   running: text('Running', 'En marche', 'In Betrieb', 'En marcha'),
-  stopped: text('Off', 'Arrêtée', 'Aus', 'Apagada'),
+  stopped: text('Off', 'Arrêt', 'Aus', 'Apagada'),
   turnOn: text('Turn on', 'Allumer', 'Einschalten', 'Encender'),
   turnOff: text('Turn off', 'Éteindre', 'Ausschalten', 'Apagar'),
   settings: text('Settings', 'Réglages', 'Einstellungen', 'Ajustes'),

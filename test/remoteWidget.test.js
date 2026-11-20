@@ -110,7 +110,7 @@ test('the status list reads the unit state with the core labels', () => {
   assert.equal(statusValue(content, 'Horizontal swing').fr, 'Balayage');
 
   const off = buildRemoteContent(gladys, buildUnit({ settings: { Power: 'False' } }));
-  assert.equal(statusValue(off, 'State').fr, 'Arrêtée');
+  assert.equal(statusValue(off, 'State').fr, 'Arrêt');
   assert.equal(byType(off, 'status')[0].items[0].color, 'neutral');
 
   const positioned = buildRemoteContent(
