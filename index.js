@@ -247,12 +247,27 @@ async function findWidgetUnit(settings) {
   return { unit: match.unit };
 }
 
+/**
+ * Name of the Gladys room of a device, from the devices the SDK keeps (read at
+ * connection, updated when the user edits a device).
+ * @param {string} deviceExternalId - The device external_id.
+ * @returns {string|undefined} The room name, if the device is in a room.
+ */
+function roomNameOf(deviceExternalId) {
+  const device = (gladys.devices || []).find((one) => one.external_id === deviceExternalId);
+  return device && device.room ? device.room.name : undefined;
+}
+
 gladys.onWidgetGet(REMOTE_WIDGET_KEY, async ({ settings }) => {
   const { unit, reason } = await findWidgetUnit(settings);
   if (!unit) {
     return buildRemoteMessageContent(reason);
   }
-  return buildRemoteContent(gladys, unit, { settings, pending: pendingStates });
+  return buildRemoteContent(gladys, unit, {
+    settings,
+    pending: pendingStates,
+    roomName: roomNameOf(settings.unit),
+  });
 });
 
 gladys.onWidgetAction(REMOTE_WIDGET_KEY, async (actionKey, params, { settings, values }) => {
