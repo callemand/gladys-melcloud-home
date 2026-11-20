@@ -65,9 +65,18 @@ test('the widget content passes the core rules, with and without its chart', () 
   assert.deepEqual(validateWidgetContent(buildRemoteContent(gladys, buildUnit())), []);
   const withoutChart = buildRemoteContent(gladys, buildUnit(), { settings: { chart: CHART.NONE } });
   assert.deepEqual(validateWidgetContent(withoutChart), []);
-  ['notConfigured', 'notFound', 'notAnAirConditioner'].forEach((reason) => {
-    assert.deepEqual(validateWidgetContent(buildRemoteMessageContent(reason)), []);
-  });
+  ['starting', 'connectionFailed', 'notConfigured', 'notFound', 'notAnAirConditioner'].forEach(
+    (reason) => {
+      const content = buildRemoteMessageContent(reason);
+      assert.deepEqual(validateWidgetContent(content), []);
+      assert.equal(typeof content.components[0].text.fr, 'string');
+    },
+  );
+});
+
+test('a "connecting" message is pulled again within seconds, the others within a minute', () => {
+  assert.equal(buildRemoteMessageContent('starting').ttl_seconds, 10);
+  assert.equal(buildRemoteMessageContent('connectionFailed').ttl_seconds, 60);
 });
 
 test('the tiles follow the room and target temperatures live', () => {

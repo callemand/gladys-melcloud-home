@@ -23,6 +23,8 @@ export const REMOTE_WIDGET_KEY = 'remote';
 // The content changes with the unit, which pushes its changes in real time:
 // the TTL is only the fallback when a refresh nudge is lost.
 const CONTENT_TTL_SECONDS = 60;
+// The core minimum: a "connecting" message must not outlive the connection.
+const STARTING_TTL_SECONDS = 10;
 
 // Values of the `chart` widget setting.
 export const CHART = {
@@ -63,6 +65,18 @@ const LABELS = {
     'Ajustes enviados',
   ),
   unchanged: text('Nothing to change', 'Aucun changement', 'Keine Änderung', 'Sin cambios'),
+  starting: text(
+    'Connecting to MELCloud Home…',
+    'Connexion à MELCloud Home en cours…',
+    'Verbindung mit MELCloud Home wird hergestellt…',
+    'Conectando con MELCloud Home…',
+  ),
+  connectionFailed: text(
+    'Cannot connect to MELCloud Home: check your account in the integration configuration.',
+    "Connexion à MELCloud Home impossible : vérifiez votre compte dans la configuration de l'intégration.",
+    'Keine Verbindung zu MELCloud Home: Prüfen Sie Ihr Konto in der Konfiguration der Integration.',
+    'No se puede conectar con MELCloud Home: compruebe su cuenta en la configuración de la integración.',
+  ),
   notConfigured: text(
     'Enter your MELCloud Home account in the integration configuration.',
     "Renseignez votre compte MELCloud Home dans la configuration de l'intégration.",
@@ -172,13 +186,13 @@ export const SETTINGS = [
 
 /**
  * The content shown instead of the remote when it cannot be drawn.
- * @param {'notConfigured'|'notFound'|'notAnAirConditioner'} reason - Why.
+ * @param {'starting'|'connectionFailed'|'notConfigured'|'notFound'|'notAnAirConditioner'} reason - Why.
  * @returns {object} The widget content.
  */
 export function buildRemoteMessageContent(reason) {
   return {
     version: 1,
-    ttl_seconds: CONTENT_TTL_SECONDS,
+    ttl_seconds: reason === 'starting' ? STARTING_TTL_SECONDS : CONTENT_TTL_SECONDS,
     components: [{ type: 'text', variant: 'body', text: LABELS[reason] }],
   };
 }
