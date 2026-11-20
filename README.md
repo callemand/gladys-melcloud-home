@@ -21,6 +21,10 @@ Air-to-air units (air conditioners) are exposed with:
 - **Vertical swing** and **Horizontal swing** — vane position, on the units that
   have vanes
 
+A **MELCloud heat pump** dashboard widget ("PAC MELCloud" in French) drives one
+air-to-air unit: room and target temperatures with their 24 h curve, its state,
+and power, setpoint and settings buttons.
+
 Air-to-water units (Ecodan heat pumps) are supported too: power, zone-1 set
 point and room temperature, hot water tank set point, tank temperature, forced
 hot water and outdoor temperature. ERV (ventilation) units are ignored for now.
