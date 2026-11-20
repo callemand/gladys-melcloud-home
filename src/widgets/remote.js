@@ -20,10 +20,6 @@ import {
 
 export const REMOTE_WIDGET_KEY = 'remote';
 
-// MELCloud Home can take a few seconds to report a command back. A value
-// commanded from the widget is shown for this long, or until MELCloud agrees.
-export const PENDING_TTL = 15000;
-
 // The content changes with the unit, which pushes its changes in real time:
 // the TTL is only the fallback when a refresh nudge is lost.
 const CONTENT_TTL_SECONDS = 60;
@@ -58,8 +54,8 @@ const LABELS = {
   turnOn: text('Turn on', 'Allumer', 'Einschalten', 'Encender'),
   turnOff: text('Turn off', 'Éteindre', 'Ausschalten', 'Apagar'),
   settings: text('Settings', 'Réglages', 'Einstellungen', 'Ajustes'),
-  turnedOn: text('Turned on', 'Allumée', 'Eingeschaltet', 'Encendida'),
-  turnedOff: text('Turned off', 'Éteinte', 'Ausgeschaltet', 'Apagada'),
+  turnedOn: text('Starting up', 'En cours de démarrage', 'Wird gestartet', 'Arrancando'),
+  turnedOff: text('Shutting down', "En cours d'extinction", 'Wird ausgeschaltet', 'Apagándose'),
   settingsSent: text(
     'Settings sent',
     'Réglages envoyés',
@@ -173,45 +169,6 @@ export const SETTINGS = [
     labels: SWING_HORIZONTAL_LABELS,
   },
 ];
-
-/**
- * Remember the values commanded from the widget until MELCloud reports them.
- * @param {object} [options] - Options.
- * @param {number} [options.ttl] - How long a commanded value wins, in ms.
- * @param {Function} [options.now] - Clock, injectable for the tests.
- * @returns {{set: Function, overlay: Function}} The store.
- */
-export function createPendingStates({ ttl = PENDING_TTL, now = () => Date.now() } = {}) {
-  const entries = new Map();
-  return {
-    /**
-     * Record a commanded value.
-     * @param {string} featureExternalId - The feature external id.
-     * @param {number} value - The commanded Gladys value.
-     * @returns {void} Nothing.
-     */
-    set(featureExternalId, value) {
-      entries.set(featureExternalId, { value, expiresAt: now() + ttl });
-    },
-
-    /**
-     * Apply the commanded values over the states read from MELCloud. An entry
-     * is forgotten once it expires or once MELCloud reports the same value.
-     * @param {Map} states - Gladys value by feature external id (modified).
-     * @returns {Map} The same map.
-     */
-    overlay(states) {
-      entries.forEach((entry, featureExternalId) => {
-        if (entry.expiresAt <= now() || states.get(featureExternalId) === entry.value) {
-          entries.delete(featureExternalId);
-        } else {
-          states.set(featureExternalId, entry.value);
-        }
-      });
-      return states;
-    },
-  };
-}
 
 /**
  * The content shown instead of the remote when it cannot be drawn.
