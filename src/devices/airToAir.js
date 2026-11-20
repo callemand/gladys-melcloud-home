@@ -588,6 +588,38 @@ export function buildFullPayload(unit) {
  * @returns {object|null} The full payload, or null if the feature is not writable.
  */
 export function buildSetPayload(gladys, unit, featureExternalId, value) {
+  return buildChangesPayload(gladys, unit, [{ featureExternalId, value }]);
+}
+
+/**
+ * Build one command payload carrying several feature changes, merged onto the
+ * unit's current full state. MELCloud takes the whole state on every command,
+ * so changes sent one by one would undo each other until the unit reports the
+ * first one back.
+ * @param {object} gladys - The SDK instance.
+ * @param {object} unit - Air-to-air unit.
+ * @param {Array<{featureExternalId: string, value: number}>} changes - The changes.
+ * @returns {object|null} The full payload, or null if a change is not writable.
+ */
+export function buildChangesPayload(gladys, unit, changes) {
+  const overlays = changes.map(({ featureExternalId, value }) =>
+    buildOverlay(gladys, unit, featureExternalId, value),
+  );
+  if (overlays.length === 0 || overlays.includes(null)) {
+    return null;
+  }
+  return Object.assign(buildFullPayload(unit), ...overlays);
+}
+
+/**
+ * The part of the command payload one feature change sets.
+ * @param {object} gladys - The SDK instance.
+ * @param {object} unit - Air-to-air unit.
+ * @param {string} featureExternalId - The changed feature external id.
+ * @param {number} value - The Gladys value.
+ * @returns {object|null} The payload fields, or null if the feature is not writable.
+ */
+function buildOverlay(gladys, unit, featureExternalId, value) {
   const ids = gladys.externalIds(DEVICE_TYPE, unit.id);
   let overlay = null;
   if (featureExternalId === ids.feature(FEATURE.POWER)) {
@@ -606,10 +638,7 @@ export function buildSetPayload(gladys, unit, featureExternalId, value) {
     const direction = SWING_HORIZONTAL_TO_MELCLOUD[value];
     overlay = direction ? { vaneHorizontalDirection: direction } : null;
   }
-  if (overlay === null) {
-    return null;
-  }
-  return { ...buildFullPayload(unit), ...overlay };
+  return overlay;
 }
 
 /**

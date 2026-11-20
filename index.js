@@ -181,9 +181,9 @@ gladys.onSetValue(async (device, feature, value) => {
   refreshWidgets();
 });
 
-// --- Remote control widget ---------------------------------------------------
+// --- "PAC MELCloud" widget ---------------------------------------------------
 /**
- * Find the air conditioner a widget instance is set to.
+ * Find the air-to-air unit a widget instance is set to.
  * @param {object} settings - The widget instance settings.
  * @returns {Promise<{unit: object}|{reason: string}>} The unit, or why there is none.
  */
@@ -209,28 +209,27 @@ gladys.onWidgetGet(REMOTE_WIDGET_KEY, async ({ settings }) => {
   return buildRemoteContent(gladys, unit, { settings, pending: pendingStates });
 });
 
-gladys.onWidgetAction(REMOTE_WIDGET_KEY, async (actionKey, params, { settings }) => {
+gladys.onWidgetAction(REMOTE_WIDGET_KEY, async (actionKey, params, { settings, values }) => {
   const { unit, reason } = await findWidgetUnit(settings);
   if (!unit) {
     // Throw: the SDK sends a success:false acknowledgement to Gladys.
-    throw new Error(`Remote control unavailable: ${reason}`);
+    throw new Error(`Heat pump widget unavailable: ${reason}`);
   }
-  const { featureExternalId, value } = planRemoteAction(
-    gladys,
-    unit,
-    actionKey,
-    params,
-    pendingStates,
-  );
-  await registry.setValue(
-    api,
-    { external_id: settings.unit },
-    { external_id: featureExternalId },
-    value,
-  );
-  pendingStates.set(featureExternalId, value);
-  await gladys.publishState(featureExternalId, value);
+  const { changes, message } = planRemoteAction(gladys, unit, actionKey, params, {
+    values,
+    pending: pendingStates,
+  });
+  if (changes.length === 0) {
+    return message;
+  }
+  // One command for every change: see registry.setValues.
+  await registry.setValues(api, { external_id: settings.unit }, changes);
+  for (const { featureExternalId, value } of changes) {
+    pendingStates.set(featureExternalId, value);
+    await gladys.publishState(featureExternalId, value);
+  }
   // No refresh nudge: after a successful action the core re-pulls the content.
+  return message;
 });
 
 // --- Polling -----------------------------------------------------------------
