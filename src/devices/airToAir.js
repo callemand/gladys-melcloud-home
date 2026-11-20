@@ -576,59 +576,70 @@ export function readStates(gladys, unit) {
   return states;
 }
 
+// The fields of the control body. A null field is left as it is: the BFF
+// applies only the fields that are set, like the air-to-water body.
+const CONTROL_FIELDS = [
+  'power',
+  'operationMode',
+  'setFanSpeed',
+  'vaneHorizontalDirection',
+  'vaneVerticalDirection',
+  'setTemperature',
+  'temperatureIncrementOverride',
+  'inStandbyMode',
+];
+
 /**
- * Build the full command payload from a unit's current state.
- * @param {object} unit - Air-to-air unit.
- * @returns {object} The full command payload.
+ * Build a control body that changes nothing: every field null.
+ * @returns {object} The payload.
  */
-export function buildFullPayload(unit) {
-  return {
-    power: getSetting(unit, 'Power') === 'True',
-    operationMode: getSetting(unit, 'OperationMode'),
-    setTemperature: toNumber(getSetting(unit, 'SetTemperature')),
-    setFanSpeed: toEnumSetting(getSetting(unit, 'SetFanSpeed'), FAN_SPEED_BY_CODE) ?? null,
-    // Normalized: a unit reporting the integer code must not have it echoed
-    // back as a code in a body the API reads as direction strings.
-    vaneVerticalDirection:
-      toEnumSetting(getSetting(unit, 'VaneVerticalDirection'), VANE_VERTICAL_BY_CODE) ?? null,
-    vaneHorizontalDirection:
-      toEnumSetting(getSetting(unit, 'VaneHorizontalDirection'), VANE_HORIZONTAL_BY_CODE) ?? null,
-    temperatureIncrementOverride: null,
-    inStandbyMode: getSetting(unit, 'InStandbyMode') === 'True',
-  };
+export function buildNullPayload() {
+  return Object.fromEntries(CONTROL_FIELDS.map((field) => [field, null]));
 }
 
 /**
- * Build the command payload for a single feature change, merged onto the
- * unit's current full state.
+ * Build the command payload for a single feature change: only the changed
+ * field is set, the rest is null. Echoing the unit's current state instead
+ * would send back what `/context` reports, which lags the unit by seconds
+ * (tens of seconds on a unit that is off): a command sent right after another
+ * would undo it, and could switch a unit back on that was just turned off.
  * @param {object} gladys - The SDK instance.
  * @param {object} unit - Air-to-air unit.
  * @param {string} featureExternalId - The changed feature external id.
  * @param {number} value - The Gladys value.
- * @returns {object|null} The full payload, or null if the feature is not writable.
+ * @returns {object|null} The payload, or null if the feature is not writable.
  */
 export function buildSetPayload(gladys, unit, featureExternalId, value) {
-  return buildChangesPayload(gladys, unit, [{ featureExternalId, value }]);
+  const payloads = buildChangesPayloads(gladys, unit, [{ featureExternalId, value }]);
+  return payloads ? payloads[0] : null;
 }
 
 /**
- * Build one command payload carrying several feature changes, merged onto the
- * unit's current full state. MELCloud takes the whole state on every command,
- * so changes sent one by one would undo each other until the unit reports the
- * first one back.
+ * Build the command payloads for several feature changes: one payload with
+ * every change, except that the two vane axes never share a payload. A unit
+ * without horizontal vanes applies neither axis when both are set in one
+ * request (documented by the MELCloud Home Home Assistant integration), so
+ * the horizontal one goes in a second payload.
  * @param {object} gladys - The SDK instance.
  * @param {object} unit - Air-to-air unit.
  * @param {Array<{featureExternalId: string, value: number}>} changes - The changes.
- * @returns {object|null} The full payload, or null if a change is not writable.
+ * @returns {Array<object>|null} The payloads, in sending order, or null if a
+ *   change is not writable.
  */
-export function buildChangesPayload(gladys, unit, changes) {
+export function buildChangesPayloads(gladys, unit, changes) {
   const overlays = changes.map(({ featureExternalId, value }) =>
     buildOverlay(gladys, unit, featureExternalId, value),
   );
   if (overlays.length === 0 || overlays.includes(null)) {
     return null;
   }
-  return Object.assign(buildFullPayload(unit), ...overlays);
+  const isHorizontal = (overlay) => 'vaneHorizontalDirection' in overlay;
+  const hasVertical = overlays.some((overlay) => 'vaneVerticalDirection' in overlay);
+  const groups =
+    hasVertical && overlays.some(isHorizontal)
+      ? [overlays.filter((overlay) => !isHorizontal(overlay)), overlays.filter(isHorizontal)]
+      : [overlays];
+  return groups.map((group) => Object.assign(buildNullPayload(), ...group));
 }
 
 /**
