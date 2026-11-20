@@ -12,6 +12,7 @@ import {
   buildRemoteContent,
   buildRemoteMessageContent,
   planRemoteAction,
+  roomTemperatureName,
   temperatureStep,
 } from '../src/widgets/remote.js';
 import { createPendingStates } from '../src/pendingStates.js';
@@ -88,6 +89,32 @@ test('the tiles follow the room and target temperatures live', () => {
       [id('temperature'), 'Consigne', 'target'],
     ],
   );
+});
+
+test('the chart legend names the room of the device and the setpoint', () => {
+  const [chart] = byType(buildRemoteContent(gladys, buildUnit(), { roomName: 'Salon' }), 'chart');
+  assert.deepEqual(chart.series_names, [
+    { en: 'Salon temp.', fr: 'Temp. salon', de: 'Temp. Salon', es: 'Temp. salon' },
+    { en: 'Setpoint', fr: 'Consigne', de: 'Sollwert', es: 'Consigna' },
+  ]);
+  // A device in no room: a generic name.
+  const [generic] = byType(buildRemoteContent(gladys, buildUnit()), 'chart');
+  assert.equal(generic.series_names[0].fr, 'Temp. pièce');
+  assert.equal(generic.series_names[0].en, 'Room temp.');
+});
+
+test('a room name is lowered inside the legend, unless it is an acronym', () => {
+  assert.equal(roomTemperatureName('Chambre L').fr, 'Temp. chambre L');
+  assert.equal(roomTemperatureName('Étage').fr, 'Temp. étage');
+  assert.equal(roomTemperatureName('SDB').fr, 'Temp. SDB');
+  assert.equal(roomTemperatureName('B').fr, 'Temp. B');
+  // English and German keep the name as typed.
+  assert.equal(roomTemperatureName('Living room').en, 'Living room temp.');
+  assert.equal(roomTemperatureName('Wohnzimmer').de, 'Temp. Wohnzimmer');
+  assert.equal(roomTemperatureName('  Salon ').fr, 'Temp. salon');
+  [undefined, null, '', '   ', 42].forEach((roomName) => {
+    assert.equal(roomTemperatureName(roomName).fr, 'Temp. pièce');
+  });
 });
 
 test('the chart draws both temperatures over 24 h, unless the settings hide it', () => {

@@ -43,6 +43,7 @@ const text = (en, fr, de, es) => ({ en, fr, de, es });
 
 const LABELS = {
   room: text('Room', 'Pièce', 'Raum', 'Estancia'),
+  roomTemperature: text('Room temp.', 'Temp. pièce', 'Raumtemp.', 'Temp. estancia'),
   target: text('Setpoint', 'Consigne', 'Sollwert', 'Consigna'),
   chart: text(
     'Temperatures, 24 h',
@@ -185,6 +186,38 @@ export const SETTINGS = [
 ];
 
 /**
+ * A room name inside a sentence: "Salon" → "salon", but "SDB" stays "SDB".
+ * @param {string} name - The room name, as the user typed it.
+ * @returns {string} The name, its first letter lowered unless it is an acronym.
+ */
+function inSentence(name) {
+  const [first, second] = name;
+  if (second === undefined || second !== second.toLowerCase()) {
+    return name;
+  }
+  return first.toLowerCase() + name.slice(1);
+}
+
+/**
+ * Legend name of the room temperature: the room of the device when it has
+ * one ("Temp. salon"), else a generic name ("Temp. pièce").
+ * @param {string} [roomName] - Name of the Gladys room of the device.
+ * @returns {object} The multi-language name.
+ */
+export function roomTemperatureName(roomName) {
+  const room = typeof roomName === 'string' ? roomName.trim() : '';
+  if (!room) {
+    return LABELS.roomTemperature;
+  }
+  return text(
+    `${room} temp.`,
+    `Temp. ${inSentence(room)}`,
+    `Temp. ${room}`,
+    `Temp. ${inSentence(room)}`,
+  );
+}
+
+/**
  * The content shown instead of the remote when it cannot be drawn.
  * @param {'starting'|'connectionFailed'|'notConfigured'|'notFound'|'notAnAirConditioner'} reason - Why.
  * @returns {object} The widget content.
@@ -309,9 +342,10 @@ function buildSettingsFields(settings) {
  * @param {object} [options] - Options.
  * @param {object} [options.settings] - The widget instance settings.
  * @param {object} [options.pending] - The store of createPendingStates.
+ * @param {string} [options.roomName] - Name of the Gladys room of the device.
  * @returns {object} The widget content.
  */
-export function buildRemoteContent(gladys, unit, { settings = {}, pending } = {}) {
+export function buildRemoteContent(gladys, unit, { settings = {}, pending, roomName } = {}) {
   const ids = gladys.externalIds(DEVICE_TYPE, unit.id);
   const states = currentStates(gladys, unit, pending);
   const isOn = states.get(ids.feature(FEATURE.POWER)) === 1;
@@ -330,6 +364,10 @@ export function buildRemoteContent(gladys, unit, { settings = {}, pending } = {}
       title: LABELS.chart,
       chart_type: 'line',
       device_features: [roomFeature, targetFeature],
+      // The legend. Without it, Gladys names the curves after the features,
+      // in English ("Room temperature", "Temperature"); a Gladys that predates
+      // `series_names` ignores it and keeps doing so.
+      series_names: [roomTemperatureName(roomName), LABELS.target],
       interval: 'last-day',
     });
   }
