@@ -6,8 +6,10 @@
 // again. The store keeps the commanded value on top of those reads instead.
 
 // How long a commanded value is shown at most, when MELCloud keeps reporting
-// the value it had before the command.
-export const PENDING_TTL = 90000;
+// the value it had before the command. An off unit took 38 s to report a
+// setpoint back on a real account: 45 s covers that, and bounds how long a
+// command the cloud accepted but the unit ignored is shown as applied.
+export const PENDING_TTL = 45000;
 
 /**
  * Remember the values commanded to the units until MELCloud reports them, so
