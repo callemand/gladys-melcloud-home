@@ -41,6 +41,21 @@ donc déjà dans l'écran Découverte — lancez un scan pour rafraîchir la lis
 
 Créez celles que vous souhaitez piloter.
 
+## Widget PAC MELCloud
+
+Sur un tableau de bord, ajoutez le widget **PAC MELCloud** et choisissez une
+PAC air-air. Il affiche :
+
+- les températures de la pièce et de consigne, et leur courbe sur 24 h (le
+  réglage **Graphique** du widget permet de la masquer). La légende reprend la
+  pièce de l'appareil dans Gladys, par exemple « Temp. salon » et « Consigne »,
+  sur une version de Gladys qui sait nommer les courbes d'un widget ;
+  ailleurs, elle affiche les noms des fonctionnalités ;
+- l'état : marche, mode, ventilation, balayage vertical et horizontal ;
+- quatre boutons : **Allumer / Éteindre**, **−** et **+** sur la consigne (par
+  0,5 °C quand la PAC le permet), et **Réglages**, qui ouvre un formulaire pour
+  changer le mode, la ventilation et les deux balayages en une fois.
+
 ## Remarques
 
 - Les unités air-air (climatisations) et air-eau (pompes à chaleur Ecodan) sont

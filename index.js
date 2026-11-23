@@ -21,6 +21,15 @@ import { normalizeConfig } from './src/config.js';
 import { MELCloudHomeApi } from './src/melcloud-home-api.js';
 import { createDeviceRegistry } from './src/devices/index.js';
 import { createRealtimeClient } from './src/realtime.js';
+import { COMMAND_INIT_WAIT, createInitGate } from './src/initGate.js';
+import { createPendingStates } from './src/pendingStates.js';
+import { createWidgetRefresher } from './src/widgetRefresh.js';
+import {
+  REMOTE_WIDGET_KEY,
+  buildRemoteContent,
+  buildRemoteMessageContent,
+  planRemoteAction,
+} from './src/widgets/remote.js';
 
 const gladys = new GladysIntegration();
 const registry = createDeviceRegistry({ gladys });
@@ -35,18 +44,54 @@ const { version: VERSION } = JSON.parse(
 let config = normalizeConfig();
 // The MELCloud Home client, null until the credentials are known and valid.
 let api = null;
+// Why `api` is null, for the widget: 'starting', 'notConfigured' or
+// 'connectionFailed'.
+let apiProblem = 'starting';
+// Requests landing while the client is (re)built wait for it (see src/initGate.js).
+const initGate = createInitGate();
+// Values commanded to the units, until MELCloud reports them: every state
+// published from a MELCloud read goes through it (see src/pendingStates.js).
+const pendingStates = createPendingStates();
+
+/**
+ * Remember commanded values, with the value MELCloud reported before each.
+ * @param {Array} reportedStates - The unit states read before the command.
+ * @param {Array<{featureExternalId: string, value: number}>} changes - The commanded values.
+ * @returns {void} Nothing.
+ */
+function rememberCommands(reportedStates, changes) {
+  const reported = new Map(
+    reportedStates.map((state) => [state.device_feature_external_id, state.state]),
+  );
+  changes.forEach(({ featureExternalId, value }) => {
+    pendingStates.set(featureExternalId, value, reported.get(featureExternalId));
+  });
+}
 
 /**
  * (Re)build the API client from the current config and check the connection.
  * @returns {Promise<void>} Nothing.
  */
-async function initApi() {
+function initApi() {
+  return initGate.run(buildApi);
+}
+
+/**
+ * Build the API client from the current config and check the connection.
+ * @returns {Promise<void>} Nothing.
+ */
+async function buildApi() {
+  // No request sees a client before its login succeeded, nor the previous
+  // account's client: they wait for the gate meanwhile.
+  api = null;
+  apiProblem = 'starting';
   config = normalizeConfig(await gladys.getConfig());
   // The previous account's units must not survive a credentials change.
   registry.invalidate();
 
   if (!config.email || !config.password) {
     api = null;
+    apiProblem = 'notConfigured';
     await gladys.setConnectionStatus(false, {
       en: 'Enter your MELCloud Home email and password.',
       fr: 'Renseignez votre email et mot de passe MELCloud Home.',
@@ -54,7 +99,7 @@ async function initApi() {
     return;
   }
 
-  api = new MELCloudHomeApi({
+  const client = new MELCloudHomeApi({
     email: config.email,
     password: config.password,
     refreshToken: config.melcloud_refresh_token,
@@ -62,11 +107,13 @@ async function initApi() {
   });
 
   try {
-    await api.getAccessToken();
+    await client.getAccessToken();
+    api = client;
+    apiProblem = null;
     await gladys.setConnectionStatus(true);
     logger.info(`Connected to MELCloud Home (integration v${VERSION})`);
   } catch (e) {
-    api = null;
+    apiProblem = 'connectionFailed';
     logger.error('MELCloud Home connection failed:', e.message);
     await gladys.setConnectionStatus(false, {
       en: 'Login failed, please check your credentials.',
@@ -132,9 +179,26 @@ async function refreshAllStates() {
   for (const device of devices) {
     const states = await registry.readStates(api, device);
     if (states) {
-      await gladys.publishStates(states);
+      await gladys.publishStates(pendingStates.apply(states));
     }
   }
+  refreshWidgets();
+}
+
+// The core drops a widget refresh sent less than 10 s after the previous one:
+// the refresher postpones it instead (see src/widgetRefresh.js).
+const widgetRefresher = createWidgetRefresher({
+  request: () => gladys.requestWidgetRefresh(REMOTE_WIDGET_KEY),
+});
+
+/**
+ * Ask Gladys to re-pull the widgets: their status list is computed here,
+ * unlike the temperature tiles that follow the device states. A no-op when no
+ * widget is open.
+ * @returns {void} Nothing.
+ */
+function refreshWidgets() {
+  widgetRefresher.refresh();
 }
 
 const realtime = createRealtimeClient({
@@ -151,12 +215,84 @@ gladys.onScanRequest(async () => {
 
 // --- Command -----------------------------------------------------------------
 gladys.onSetValue(async (device, feature, value) => {
+  // Only while the client is being built, and briefly: see COMMAND_INIT_WAIT.
+  if (!api) {
+    await initGate.wait({ timeout: COMMAND_INIT_WAIT });
+  }
   if (!api) {
     // Throw: the SDK sends a success:false acknowledgement to Gladys.
-    throw new Error('MELCloud Home is not configured');
+    throw new Error(`MELCloud Home is not available (${apiProblem || 'notConfigured'})`);
   }
-  await registry.setValue(api, device, feature, value);
+  const reported = await registry.setValue(api, device, feature, value);
+  rememberCommands(reported, [{ featureExternalId: feature.external_id, value }]);
   await gladys.publishState(feature.external_id, value);
+  refreshWidgets();
+});
+
+// --- "PAC MELCloud" widget ---------------------------------------------------
+/**
+ * Find the air-to-air unit a widget instance is set to.
+ * @param {object} settings - The widget instance settings.
+ * @returns {Promise<{unit: object}|{reason: string}>} The unit, or why there is none.
+ */
+async function findWidgetUnit(settings) {
+  await initGate.wait();
+  if (!api) {
+    return { reason: apiProblem || 'notConfigured' };
+  }
+  const match = await registry.findUnit(api, settings.unit);
+  if (!match) {
+    return { reason: 'notFound' };
+  }
+  if (match.blueprint.key !== 'ata') {
+    return { reason: 'notAnAirConditioner' };
+  }
+  return { unit: match.unit };
+}
+
+/**
+ * Name of the Gladys room of a device, from the devices the SDK keeps (read at
+ * connection, updated when the user edits a device).
+ * @param {string} deviceExternalId - The device external_id.
+ * @returns {string|undefined} The room name, if the device is in a room.
+ */
+function roomNameOf(deviceExternalId) {
+  const device = (gladys.devices || []).find((one) => one.external_id === deviceExternalId);
+  return device && device.room ? device.room.name : undefined;
+}
+
+gladys.onWidgetGet(REMOTE_WIDGET_KEY, async ({ settings }) => {
+  const { unit, reason } = await findWidgetUnit(settings);
+  if (!unit) {
+    return buildRemoteMessageContent(reason);
+  }
+  return buildRemoteContent(gladys, unit, {
+    settings,
+    pending: pendingStates,
+    roomName: roomNameOf(settings.unit),
+  });
+});
+
+gladys.onWidgetAction(REMOTE_WIDGET_KEY, async (actionKey, params, { settings, values }) => {
+  const { unit, reason } = await findWidgetUnit(settings);
+  if (!unit) {
+    // Throw: the SDK sends a success:false acknowledgement to Gladys.
+    throw new Error(`Heat pump widget unavailable: ${reason}`);
+  }
+  const { changes, message } = planRemoteAction(gladys, unit, actionKey, params, {
+    values,
+    pending: pendingStates,
+  });
+  if (changes.length === 0) {
+    return message;
+  }
+  const reported = await registry.setValues(api, { external_id: settings.unit }, changes);
+  rememberCommands(reported, changes);
+  for (const { featureExternalId, value } of changes) {
+    await gladys.publishState(featureExternalId, value);
+  }
+  // No refresh nudge: after a successful action the core re-pulls the content.
+  return message;
 });
 
 // --- Polling -----------------------------------------------------------------
@@ -166,7 +302,7 @@ gladys.onPoll(async (device) => {
   }
   const states = await registry.readStates(api, device);
   if (states) {
-    await gladys.publishStates(states);
+    await gladys.publishStates(pendingStates.apply(states));
   }
 });
 

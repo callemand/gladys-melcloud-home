@@ -9,6 +9,9 @@ import * as airToAir from './airToAir.js';
 import * as airToWater from './airToWater.js';
 import { createUnitCache } from './unitCache.js';
 
+// Two commands to one unit are spaced by this much (see createDeviceRegistry).
+export const COMMAND_SPACING = 2000;
+
 export const DEVICE_BLUEPRINTS = [
   {
     key: 'ata',
@@ -32,12 +35,18 @@ export const DEVICE_BLUEPRINTS = [
  * @param {object} options.gladys - The SDK instance (builds the external ids).
  * @param {Array} [options.blueprints] - The device families to serve.
  * @param {object} [options.cache] - The unit listing cache.
+ * @param {number} [options.commandSpacing] - Pause between two commands to one
+ *   unit, in ms: a command right behind another can be accepted by the cloud
+ *   and ignored by the unit.
+ * @param {Function} [options.sleep] - Waits a number of ms, injectable for the tests.
  * @returns {object} The registry.
  */
 export function createDeviceRegistry({
   gladys,
   blueprints = DEVICE_BLUEPRINTS,
   cache = createUnitCache(),
+  commandSpacing = COMMAND_SPACING,
+  sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 } = {}) {
   const listUnits = (api, blueprint) => cache.get(blueprint.key, () => blueprint.listUnits(api));
 
@@ -60,6 +69,16 @@ export function createDeviceRegistry({
 
   return {
     blueprints,
+
+    /**
+     * Find the unit behind a Gladys device external id.
+     * @param {object} api - The MELCloud Home client.
+     * @param {string} deviceExternalId - The device external id.
+     * @returns {Promise<{blueprint: object, unit: object}|null>} Match or null.
+     */
+    findUnit(api, deviceExternalId) {
+      return findBlueprintByDevice(api, { external_id: deviceExternalId });
+    },
 
     /**
      * Drop the cached listings, so the next read hits MELCloud Home.
@@ -104,7 +123,7 @@ export function createDeviceRegistry({
      * @param {object} device - The Gladys device.
      * @param {object} feature - The changed feature.
      * @param {number} value - The Gladys value.
-     * @returns {Promise<void>} Nothing.
+     * @returns {Promise<Array>} The states the unit reported before the command.
      */
     async setValue(api, device, feature, value) {
       const match = await findBlueprintByDevice(api, device);
@@ -124,6 +143,40 @@ export function createDeviceRegistry({
       // The cached listing still holds the pre-command state: drop it so the
       // next poll reads what the unit actually did with the command.
       cache.invalidate();
+      return match.blueprint.module.readStates(gladys, match.unit);
+    },
+
+    /**
+     * Send several feature changes of one unit to MELCloud Home: as one
+     * command, except where the family needs several (the two vane axes of an
+     * air conditioner), then sent one after the other, spaced by
+     * `commandSpacing`. Only the families whose module builds such payloads
+     * accept it.
+     * @param {object} api - The MELCloud Home client.
+     * @param {object} device - The Gladys device.
+     * @param {Array<{featureExternalId: string, value: number}>} changes - The changes.
+     * @returns {Promise<Array>} The states the unit reported before the command.
+     */
+    async setValues(api, device, changes) {
+      const match = await findBlueprintByDevice(api, device);
+      if (!match) {
+        throw new Error(`MELCloud Home unit not found for ${device.external_id}`);
+      }
+      const { module } = match.blueprint;
+      const payloads = module.buildChangesPayloads
+        ? module.buildChangesPayloads(gladys, match.unit, changes)
+        : null;
+      if (!payloads) {
+        throw new Error(`MELCloud Home changes are not writable on ${device.external_id}`);
+      }
+      for (const [index, payload] of payloads.entries()) {
+        if (index > 0) {
+          await sleep(commandSpacing);
+        }
+        await match.blueprint.setUnit(api, match.unit.id, payload);
+      }
+      cache.invalidate();
+      return module.readStates(gladys, match.unit);
     },
   };
 }

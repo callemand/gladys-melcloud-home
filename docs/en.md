@@ -40,6 +40,20 @@ already listed in the Discovery screen — run a scan to refresh the list.
 
 Create the ones you want to control.
 
+## MELCloud heat pump widget
+
+On a dashboard, add the **MELCloud heat pump** widget and pick an air-to-air
+unit. It shows:
+
+- the room and target temperatures, and their 24 h curve (the **Chart**
+  setting of the widget hides it). The legend names the device's Gladys room,
+  for example "Living room temp." and "Setpoint", on a Gladys version that
+  lets a widget name its curves; elsewhere it shows the feature names;
+- the state: power, mode, fan speed, vertical and horizontal swing;
+- four buttons: **Turn on / Turn off**, **−** and **+** on the setpoint (by
+  0.5 °C when the unit allows it), and **Settings**, which opens a form to
+  change the mode, the fan speed and both swings at once.
+
 ## Notes
 
 - Air-to-air (air conditioners) and air-to-water (Ecodan heat pumps) units are
