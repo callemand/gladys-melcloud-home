@@ -21,11 +21,11 @@ import { normalizeConfig } from './src/config.js';
 import { MELCloudHomeApi } from './src/melcloud-home-api.js';
 import { createDeviceRegistry } from './src/devices/index.js';
 import { createRealtimeClient } from './src/realtime.js';
+import { createPendingStates } from './src/pendingStates.js';
 import {
   REMOTE_WIDGET_KEY,
   buildRemoteContent,
   buildRemoteMessageContent,
-  createPendingStates,
   planRemoteAction,
 } from './src/widgets/remote.js';
 
@@ -42,8 +42,24 @@ const { version: VERSION } = JSON.parse(
 let config = normalizeConfig();
 // The MELCloud Home client, null until the credentials are known and valid.
 let api = null;
-// Values commanded from the remote control widget, until MELCloud reports them.
+// Values commanded to the units, until MELCloud reports them: every state
+// published from a MELCloud read goes through it (see src/pendingStates.js).
 const pendingStates = createPendingStates();
+
+/**
+ * Remember commanded values, with the value MELCloud reported before each.
+ * @param {Array} reportedStates - The unit states read before the command.
+ * @param {Array<{featureExternalId: string, value: number}>} changes - The commanded values.
+ * @returns {void} Nothing.
+ */
+function rememberCommands(reportedStates, changes) {
+  const reported = new Map(
+    reportedStates.map((state) => [state.device_feature_external_id, state.state]),
+  );
+  changes.forEach(({ featureExternalId, value }) => {
+    pendingStates.set(featureExternalId, value, reported.get(featureExternalId));
+  });
+}
 
 /**
  * (Re)build the API client from the current config and check the connection.
@@ -141,7 +157,7 @@ async function refreshAllStates() {
   for (const device of devices) {
     const states = await registry.readStates(api, device);
     if (states) {
-      await gladys.publishStates(states);
+      await gladys.publishStates(pendingStates.apply(states));
     }
   }
   refreshWidgets();
@@ -175,8 +191,8 @@ gladys.onSetValue(async (device, feature, value) => {
     // Throw: the SDK sends a success:false acknowledgement to Gladys.
     throw new Error('MELCloud Home is not configured');
   }
-  await registry.setValue(api, device, feature, value);
-  pendingStates.set(feature.external_id, value);
+  const reported = await registry.setValue(api, device, feature, value);
+  rememberCommands(reported, [{ featureExternalId: feature.external_id, value }]);
   await gladys.publishState(feature.external_id, value);
   refreshWidgets();
 });
@@ -222,10 +238,9 @@ gladys.onWidgetAction(REMOTE_WIDGET_KEY, async (actionKey, params, { settings, v
   if (changes.length === 0) {
     return message;
   }
-  // One command for every change: see registry.setValues.
-  await registry.setValues(api, { external_id: settings.unit }, changes);
+  const reported = await registry.setValues(api, { external_id: settings.unit }, changes);
+  rememberCommands(reported, changes);
   for (const { featureExternalId, value } of changes) {
-    pendingStates.set(featureExternalId, value);
     await gladys.publishState(featureExternalId, value);
   }
   // No refresh nudge: after a successful action the core re-pulls the content.
@@ -239,7 +254,7 @@ gladys.onPoll(async (device) => {
   }
   const states = await registry.readStates(api, device);
   if (states) {
-    await gladys.publishStates(states);
+    await gladys.publishStates(pendingStates.apply(states));
   }
 });
 

@@ -11,10 +11,10 @@ import {
   CHART,
   buildRemoteContent,
   buildRemoteMessageContent,
-  createPendingStates,
   planRemoteAction,
   temperatureStep,
 } from '../src/widgets/remote.js';
+import { createPendingStates } from '../src/pendingStates.js';
 
 const gladys = createFakeGladys();
 const id = (feature) => `ext:test:ata:unit-1:${feature}`;
@@ -285,7 +285,7 @@ test('an unknown key is refused', () => {
 test('a commanded value wins until MELCloud reports it or it expires', () => {
   let now = 0;
   const pending = createPendingStates({ ttl: 1000, now: () => now });
-  pending.set(id('temperature'), 22);
+  pending.set(id('temperature'), 22, 21);
 
   // MELCloud still reports 21: the widget keeps showing and stepping from 22.
   assert.equal(plan(buildUnit(), ACTION.TEMP_UP, { delta: 1 }, { pending }).changes[0].value, 23);
@@ -295,9 +295,14 @@ test('a commanded value wins until MELCloud reports it or it expires', () => {
   assert.equal(plan(buildUnit(), ACTION.TEMP_UP, { delta: 1 }, { pending }).changes[0].value, 22);
 });
 
-test('a commanded value is forgotten once MELCloud reports it', () => {
+test('a commanded value shows while MELCloud lags, then MELCloud takes over', () => {
   const pending = createPendingStates({ now: () => 0 });
-  pending.set(id('power'), 0);
+  pending.set(id('power'), 0, 1);
+  // MELCloud still reports the unit on: the widget shows the command.
+  assert.equal(
+    statusValue(buildRemoteContent(gladys, buildUnit(), { pending }), 'State').en,
+    'Off',
+  );
   const reported = buildUnit({ settings: { Power: 'False' } });
   assert.equal(statusValue(buildRemoteContent(gladys, reported, { pending }), 'State').en, 'Off');
   // Forgotten: a later "on" from the phone shows up at once.
@@ -309,7 +314,7 @@ test('a commanded value is forgotten once MELCloud reports it', () => {
 
 test('the Settings form is pre-filled with the commanded values', () => {
   const pending = createPendingStates({ now: () => 0 });
-  pending.set(id('mode'), AC_MODE.HEATING);
+  pending.set(id('mode'), AC_MODE.HEATING, AC_MODE.COOLING);
   const content = buildRemoteContent(gladys, buildUnit(), { pending });
   assert.equal(field(content, 'mode').default, String(AC_MODE.HEATING));
 });
