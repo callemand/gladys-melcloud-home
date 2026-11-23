@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { MELCloudHomeApi, API_ENDPOINT } from '../src/melcloud-home-api.js';
+import { MELCloudHomeApi, API_ENDPOINT, WS_HASH_ENDPOINT } from '../src/melcloud-home-api.js';
 
 const CONTEXT = {
   buildings: [{ id: 'b1', airToAirUnits: [{ id: 'u1' }, { id: 'u2' }] }],
@@ -107,4 +107,44 @@ test('setAtaUnit sends a PUT with the payload and auth header', async () => {
   assert.equal(calls[0].url, `${API_ENDPOINT}/monitor/ataunit/u1`);
   assert.deepEqual(calls[0].payload, { power: false });
   assert.equal(calls[0].options.headers.Authorization, 'Bearer token');
+});
+
+// --- WebSocket hash ----------------------------------------------------------
+
+const apiWithHashResponse = (data) => {
+  const calls = [];
+  const api = new MELCloudHomeApi({
+    httpClient: {
+      get: async (url, options) => {
+        calls.push({ url, options });
+        return { data };
+      },
+    },
+    now: () => 0,
+  });
+  api.accessToken = 'token';
+  api.tokenExpiresAt = 10_000;
+  return { api, calls };
+};
+
+test('getWebSocketHash calls the lambda endpoint with the bearer token', async () => {
+  const { api, calls } = apiWithHashResponse({ hash: 'H', userId: 'U' });
+  assert.equal(await api.getWebSocketHash(), 'H');
+  assert.equal(calls[0].url, WS_HASH_ENDPOINT);
+  assert.equal(calls[0].options.headers.Authorization, 'Bearer token');
+  // The hash does NOT come from the BFF: it has its own host.
+  assert.ok(!WS_HASH_ENDPOINT.startsWith(API_ENDPOINT));
+});
+
+test('getWebSocketHash accepts a bare string response', async () => {
+  // Both shapes occur in the wild.
+  const { api } = apiWithHashResponse('  H  ');
+  assert.equal(await api.getWebSocketHash(), 'H');
+});
+
+test('getWebSocketHash throws when no hash comes back', async () => {
+  for (const data of [{}, '', '   ', null, { hash: 42 }]) {
+    const { api } = apiWithHashResponse(data);
+    await assert.rejects(() => api.getWebSocketHash(), /no WebSocket hash/);
+  }
 });

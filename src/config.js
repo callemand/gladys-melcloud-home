@@ -1,20 +1,11 @@
-// -----------------------------------------------------------------------------
-// Integration configuration.
+// Integration configuration, from the manifest `config_schema`.
 //
-// Values are filled in by the user from the `config_schema` declared in
-// `gladys-assistant-integration.json`. The SDK fetches them (`gladys.getConfig()`)
-// and notifies changes through `gladys.onConfigUpdated()`.
-//
-// `melcloud_refresh_token` is NOT in the config_schema: it is written back by the
-// integration itself (via `gladys.setConfig`) so the OAuth session survives a
-// restart without asking the user to log in again.
-// -----------------------------------------------------------------------------
+// `melcloud_refresh_token` is NOT in that schema: the integration writes it
+// back itself so the OAuth session survives a restart.
 
-// Not configurable: Gladys does not accept an arbitrary polling interval
-// (`t_device.poll_frequency` is an ENUM over the core DEVICE_POLL_FREQUENCIES,
-// in MILLISECONDS), and a device carrying anything else is rejected by
-// `POST /discovered_device` with a 400. Every minute is the slowest value the
-// enum offers and is plenty for a cloud API.
+// Not configurable: `t_device.poll_frequency` is an ENUM over the core
+// DEVICE_POLL_FREQUENCIES, in milliseconds, and anything else gets the device
+// rejected with a 400. This is the slowest value it offers.
 export const POLL_FREQUENCY = 60000;
 
 export const DEFAULT_CONFIG = {

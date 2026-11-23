@@ -20,7 +20,7 @@ import { GladysIntegration, logger } from '@gladysassistant/integration-sdk';
 import { normalizeConfig } from './src/config.js';
 import { MELCloudHomeApi } from './src/melcloud-home-api.js';
 import { createDeviceRegistry } from './src/devices/index.js';
-import { buildCapabilities } from './src/capabilities.js';
+import { createRealtimeClient } from './src/realtime.js';
 
 const gladys = new GladysIntegration();
 const registry = createDeviceRegistry({ gladys });
@@ -75,30 +75,6 @@ async function initApi() {
   }
 }
 
-/**
- * Ask Gladys its version and tell the registry what it can accept.
- *
- * A feature type the running Gladys does not know gets the WHOLE discovery
- * payload rejected, so this runs before the first publish.
- * @returns {Promise<void>} Nothing.
- */
-async function resolveCapabilities() {
-  try {
-    const status = await gladys.getStatus();
-    const capabilities = buildCapabilities(status.gladys_version);
-    registry.setCapabilities(capabilities);
-    if (!capabilities.swing) {
-      logger.info(
-        `Gladys ${status.gladys_version} has no air conditioning swing support: ` +
-          'the vane controls are not published (needs Gladys 4.84.2+)',
-      );
-    }
-  } catch (e) {
-    // Keep the conservative default rather than risk a rejected discovery.
-    logger.warn('Could not read the Gladys version, swing controls disabled:', e.message);
-  }
-}
-
 // --- Discovery ---------------------------------------------------------------
 /**
  * Publish every unit of the account as a discovered device.
@@ -108,7 +84,7 @@ async function resolveCapabilities() {
  * the logs: the failure is logged explicitly here.
  * @returns {Promise<void>} Nothing.
  */
-async function publishDevices() {
+async function doPublishDevices() {
   if (!api) {
     logger.warn('Skipping discovery: MELCloud Home is not configured');
     return;
@@ -122,6 +98,50 @@ async function publishDevices() {
     throw e;
   }
 }
+
+// Connecting, a config change and a Scan can each ask for a publish at once,
+// duplicating the log line and the POST.
+let publishInFlight = null;
+
+/**
+ * Publish the discovered devices, joining a publish already in flight.
+ * @returns {Promise<void>} Nothing.
+ */
+function publishDevices() {
+  if (!publishInFlight) {
+    publishInFlight = doPublishDevices().finally(() => {
+      publishInFlight = null;
+    });
+  }
+  return publishInFlight;
+}
+
+// --- Real time ---------------------------------------------------------------
+/**
+ * Refresh and publish the state of every created device. Costs one `/context`
+ * request in total: the unit cache shares it across the devices.
+ * @returns {Promise<void>} Nothing.
+ */
+async function refreshAllStates() {
+  if (!api) {
+    return;
+  }
+  registry.invalidate();
+  const devices =
+    gladys.devices && gladys.devices.length ? gladys.devices : await gladys.getDevices();
+  for (const device of devices) {
+    const states = await registry.readStates(api, device);
+    if (states) {
+      await gladys.publishStates(states);
+    }
+  }
+}
+
+const realtime = createRealtimeClient({
+  getApi: () => api,
+  onUnitsChanged: refreshAllStates,
+  logger,
+});
 
 // A scan is an explicit user gesture: never answer it from the cache.
 gladys.onScanRequest(async () => {
@@ -151,12 +171,21 @@ gladys.onPoll(async (device) => {
 });
 
 // --- Config change -----------------------------------------------------------
-gladys.onConfigUpdated(async () => {
+gladys.onConfigUpdated(async (newConfig) => {
+  // Persisting the refresh token is itself a config write and comes back here:
+  // re-initializing on it would rebuild the client, refresh, persist again.
+  const next = normalizeConfig(newConfig);
+  if (next.email === config.email && next.password === config.password) {
+    config = next;
+    return;
+  }
   await initApi();
   // New credentials can expose a different set of units: re-publish so the
   // Discovery screen reflects the account actually connected
   // (publishDiscoveredDevices upserts by external_id).
   await publishDevices();
+  // The hash is tied to the account.
+  realtime.restart();
 });
 
 // --- Connection lifecycle ----------------------------------------------------
@@ -167,9 +196,9 @@ gladys.onConfigUpdated(async () => {
 // user having to hit "Scan" first.
 gladys.on('connected', async () => {
   try {
-    await resolveCapabilities();
     await initApi();
     await publishDevices();
+    realtime.start();
   } catch (e) {
     logger.error('MELCloud Home initialization failed:', e.message);
   }
@@ -180,6 +209,7 @@ gladys.on('connected', async () => {
 // the container (SIGTERM/SIGINT).
 gladys.handleShutdown((signal) => {
   logger.info(`Received ${signal} -> graceful shutdown`);
+  realtime.stop();
 });
 
 // --- Startup -----------------------------------------------------------------

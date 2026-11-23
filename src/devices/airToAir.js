@@ -1,19 +1,8 @@
-// -----------------------------------------------------------------------------
-// Device type: AIR-TO-AIR unit (air conditioner).
+// AIR-TO-AIR unit (air conditioner).
 //
-// Maps a MELCloud Home air-to-air unit to a Gladys device:
-//   - power               (on/off)
-//   - mode                (heat / cool / dry / fan / auto)
-//   - target temperature  (set point)
-//   - room temperature    (read-only)
-//   - vertical swing      (vane, only on units that report one)
-//   - horizontal swing    (vane, only on units that report one)
-//
-// MELCloud Home returns the state as a `settings: [{name, value}]` array where
-// every value is a STRING ("True", "Cool", "28"...). Commands are sent as a full
-// flat camelCase object to `PUT /monitor/ataunit/{id}`, so a change is overlaid
-// on the current full state to avoid resetting the other attributes.
-// -----------------------------------------------------------------------------
+// State comes as a `settings: [{name, value}]` array of STRINGS ("True",
+// "Cool", "28"). Commands go to `PUT /monitor/ataunit/{id}` as a flat camelCase
+// object; a change is overlaid on the current state so the rest is preserved.
 
 import {
   DEVICE_FEATURE_CATEGORIES,
@@ -22,7 +11,6 @@ import {
 } from '@gladysassistant/integration-sdk';
 
 import { POLL_FREQUENCY } from '../config.js';
-import { DEFAULT_CAPABILITIES } from '../capabilities.js';
 
 export const DEVICE_TYPE = 'ata';
 
@@ -32,6 +20,7 @@ const SWING_FEATURE_TYPE = {
   VERTICAL: 'swing-vertical',
   HORIZONTAL: 'swing-horizontal',
 };
+const FAN_SPEED_FEATURE_TYPE = 'fan-speed';
 
 export const FEATURE = {
   POWER: 'power',
@@ -40,6 +29,7 @@ export const FEATURE = {
   ROOM_TEMPERATURE: 'room-temperature',
   SWING_VERTICAL: 'swing-vertical',
   SWING_HORIZONTAL: 'swing-horizontal',
+  FAN_SPEED: 'fan-speed',
 };
 
 // Gladys AC_MODE values (mirrors the Gladys core constants; the SDK does not
@@ -79,10 +69,10 @@ const MODE_TO_MELCLOUD = {
 
 // --- Vanes (swing) -----------------------------------------------------------
 // Gladys swing values (mirrors the core AC_SWING_* constants; the SDK does not
-// export them). Gladys imposes a fixed vocabulary — off / swing / position 1-5 —
-// so MELCloud's "Auto" lands on the OFF slot: it is the only one that means
-// "neither swinging nor pinned to a position". The Gladys UI labels that slot
-// "off" whatever label we publish alongside it.
+// export them). MELCloud's "Auto" is the core AUTO value: the unit picks the
+// direction itself. Before that value existed it was mapped on OFF, so OFF is
+// still accepted as an alias of Auto in commands (scenes saved back then), but
+// never published.
 export const AC_SWING_VERTICAL = {
   OFF: 0,
   SWING: 1,
@@ -91,6 +81,7 @@ export const AC_SWING_VERTICAL = {
   POSITION_3: 4,
   POSITION_4: 5,
   POSITION_5: 6,
+  AUTO: 8,
 };
 
 export const AC_SWING_HORIZONTAL = {
@@ -101,6 +92,7 @@ export const AC_SWING_HORIZONTAL = {
   POSITION_3: 4,
   POSITION_4: 5,
   POSITION_5: 6,
+  AUTO: 8,
 };
 
 // MELCloud Home vane directions. `/context` reports them as these strings; the
@@ -152,7 +144,7 @@ const VANE_HORIZONTAL_BY_CODE = {
 };
 
 const SWING_VERTICAL_TO_GLADYS = {
-  [VANE_VERTICAL.AUTO]: AC_SWING_VERTICAL.OFF,
+  [VANE_VERTICAL.AUTO]: AC_SWING_VERTICAL.AUTO,
   [VANE_VERTICAL.SWING]: AC_SWING_VERTICAL.SWING,
   [VANE_VERTICAL.ONE]: AC_SWING_VERTICAL.POSITION_1,
   [VANE_VERTICAL.TWO]: AC_SWING_VERTICAL.POSITION_2,
@@ -162,7 +154,7 @@ const SWING_VERTICAL_TO_GLADYS = {
 };
 
 const SWING_HORIZONTAL_TO_GLADYS = {
-  [VANE_HORIZONTAL.AUTO]: AC_SWING_HORIZONTAL.OFF,
+  [VANE_HORIZONTAL.AUTO]: AC_SWING_HORIZONTAL.AUTO,
   [VANE_HORIZONTAL.SWING]: AC_SWING_HORIZONTAL.SWING,
   [VANE_HORIZONTAL.LEFT]: AC_SWING_HORIZONTAL.POSITION_1,
   [VANE_HORIZONTAL.LEFT_CENTRE]: AC_SWING_HORIZONTAL.POSITION_2,
@@ -174,13 +166,21 @@ const SWING_HORIZONTAL_TO_GLADYS = {
 const invert = (map) =>
   Object.fromEntries(Object.entries(map).map(([melcloud, gladys]) => [gladys, melcloud]));
 
-const SWING_VERTICAL_TO_MELCLOUD = invert(SWING_VERTICAL_TO_GLADYS);
-const SWING_HORIZONTAL_TO_MELCLOUD = invert(SWING_HORIZONTAL_TO_GLADYS);
+const SWING_VERTICAL_TO_MELCLOUD = {
+  ...invert(SWING_VERTICAL_TO_GLADYS),
+  [AC_SWING_VERTICAL.OFF]: VANE_VERTICAL.AUTO,
+};
+const SWING_HORIZONTAL_TO_MELCLOUD = {
+  ...invert(SWING_HORIZONTAL_TO_GLADYS),
+  [AC_SWING_HORIZONTAL.OFF]: VANE_HORIZONTAL.AUTO,
+};
 
 // The label is only a fallback in the Gladys UI (the static i18n key wins when
-// there is one), but it documents what each slot really drives on the unit.
+// there is one): it is what a core without the AUTO translation displays.
+// Integer keys iterate in ascending order, so buildSwingOptions moves Auto
+// (the highest value) back to the top of the list, where the remote has it.
 const SWING_VERTICAL_LABELS = {
-  [AC_SWING_VERTICAL.OFF]: 'Auto',
+  [AC_SWING_VERTICAL.AUTO]: 'Auto',
   [AC_SWING_VERTICAL.SWING]: 'Swing',
   [AC_SWING_VERTICAL.POSITION_1]: 'Position 1',
   [AC_SWING_VERTICAL.POSITION_2]: 'Position 2',
@@ -190,7 +190,7 @@ const SWING_VERTICAL_LABELS = {
 };
 
 const SWING_HORIZONTAL_LABELS = {
-  [AC_SWING_HORIZONTAL.OFF]: 'Auto',
+  [AC_SWING_HORIZONTAL.AUTO]: 'Auto',
   [AC_SWING_HORIZONTAL.SWING]: 'Swing',
   [AC_SWING_HORIZONTAL.POSITION_1]: 'Left',
   [AC_SWING_HORIZONTAL.POSITION_2]: 'Left centre',
@@ -199,13 +199,93 @@ const SWING_HORIZONTAL_LABELS = {
   [AC_SWING_HORIZONTAL.POSITION_5]: 'Right',
 };
 
+// --- Fan speed ---------------------------------------------------------------
+// Gladys also has QUIET and TURBO, which MELCloud has no equivalent for.
+export const AC_FAN_SPEED = {
+  AUTO: 0,
+  LOW: 1,
+  LOW_MID: 2,
+  MID: 3,
+  MID_HIGH: 4,
+  HIGH: 5,
+};
+
+// "Off" only ever comes back on ActualFanSpeed, never as a setpoint.
+export const ATA_FAN_SPEED = {
+  AUTO: 'Auto',
+  ONE: 'One',
+  TWO: 'Two',
+  THREE: 'Three',
+  FOUR: 'Four',
+  FIVE: 'Five',
+};
+
+const FAN_SPEED_BY_CODE = {
+  0: ATA_FAN_SPEED.AUTO,
+  1: ATA_FAN_SPEED.ONE,
+  2: ATA_FAN_SPEED.TWO,
+  3: ATA_FAN_SPEED.THREE,
+  4: ATA_FAN_SPEED.FOUR,
+  5: ATA_FAN_SPEED.FIVE,
+};
+
+const FAN_SPEED_TO_GLADYS = {
+  [ATA_FAN_SPEED.AUTO]: AC_FAN_SPEED.AUTO,
+  [ATA_FAN_SPEED.ONE]: AC_FAN_SPEED.LOW,
+  [ATA_FAN_SPEED.TWO]: AC_FAN_SPEED.LOW_MID,
+  [ATA_FAN_SPEED.THREE]: AC_FAN_SPEED.MID,
+  [ATA_FAN_SPEED.FOUR]: AC_FAN_SPEED.MID_HIGH,
+  [ATA_FAN_SPEED.FIVE]: AC_FAN_SPEED.HIGH,
+};
+
+const FAN_SPEED_TO_MELCLOUD = invert(FAN_SPEED_TO_GLADYS);
+
+const FAN_SPEED_LABELS = {
+  [AC_FAN_SPEED.AUTO]: 'Auto',
+  [AC_FAN_SPEED.LOW]: 'Speed 1',
+  [AC_FAN_SPEED.LOW_MID]: 'Speed 2',
+  [AC_FAN_SPEED.MID]: 'Speed 3',
+  [AC_FAN_SPEED.MID_HIGH]: 'Speed 4',
+  [AC_FAN_SPEED.HIGH]: 'Speed 5',
+};
+
+// Gladys value of the Nth speed, so `numberOfFanSpeeds` maps to a range.
+const FAN_SPEED_BY_RANK = [
+  AC_FAN_SPEED.LOW,
+  AC_FAN_SPEED.LOW_MID,
+  AC_FAN_SPEED.MID,
+  AC_FAN_SPEED.MID_HIGH,
+  AC_FAN_SPEED.HIGH,
+];
+const MAX_FAN_SPEEDS = FAN_SPEED_BY_RANK.length;
+
 /**
- * Normalize a vane setting to its MELCloud string, accepting the integer code.
- * @param {string|number|undefined} value - The raw setting value.
- * @param {object} byCode - The code table of that vane.
- * @returns {string|undefined} The MELCloud direction string.
+ * Build the `supported_options` of the fan speed feature: Auto plus only the
+ * speeds this unit actually has.
+ * @param {object} unit - Air-to-air unit.
+ * @returns {Array} The supported options.
  */
-function toVaneDirection(value, byCode) {
+function buildFanSpeedOptions(unit) {
+  const reported = (unit.capabilities || {}).numberOfFanSpeeds;
+  const count =
+    typeof reported === 'number' && reported > 0
+      ? Math.min(reported, MAX_FAN_SPEEDS)
+      : MAX_FAN_SPEEDS;
+  const values = [AC_FAN_SPEED.AUTO, ...FAN_SPEED_BY_RANK.slice(0, count)];
+  return values.map((value, index) => ({
+    value,
+    label: FAN_SPEED_LABELS[value],
+    sort_order: index,
+  }));
+}
+
+/**
+ * Normalize an enum setting to its MELCloud string, accepting the integer code.
+ * @param {string|number|undefined} value - The raw setting value.
+ * @param {object} byCode - The code table of that setting.
+ * @returns {string|undefined} The MELCloud string.
+ */
+function toEnumSetting(value, byCode) {
   if (value === undefined || value === null || value === '') {
     return undefined;
   }
@@ -220,14 +300,17 @@ function toVaneDirection(value, byCode) {
  * Build the `supported_options` of a swing feature: Gladys then offers only
  * these positions instead of its full static catalog.
  * @param {object} labels - Label by Gladys value.
+ * @param {number} auto - The Gladys AUTO value, listed first.
  * @returns {Array} The supported options.
  */
-function buildSwingOptions(labels) {
-  return Object.entries(labels).map(([value, label], index) => ({
-    value: Number(value),
-    label,
-    sort_order: index,
-  }));
+function buildSwingOptions(labels, auto) {
+  const values = [
+    auto,
+    ...Object.keys(labels)
+      .map(Number)
+      .filter((value) => value !== auto),
+  ];
+  return values.map((value, index) => ({ value, label: labels[value], sort_order: index }));
 }
 
 /**
@@ -286,10 +369,9 @@ function getTemperatureStep(unit) {
  * Build the Gladys discovery payload for one air-to-air unit.
  * @param {object} gladys - The SDK instance.
  * @param {object} unit - Air-to-air unit.
- * @param {object} [capabilities] - What the Gladys instance supports.
  * @returns {object} The Gladys device.
  */
-export function buildDevice(gladys, unit, capabilities = DEFAULT_CAPABILITIES) {
+export function buildDevice(gladys, unit) {
   const ids = gladys.externalIds(DEVICE_TYPE, unit.id);
   const { min, max } = getTemperatureBounds(unit);
   const step = getTemperatureStep(unit);
@@ -357,11 +439,19 @@ export function buildDevice(gladys, unit, capabilities = DEFAULT_CAPABILITIES) {
     ],
   };
 
-  // Gladys < 4.84.2 does not know the swing feature types and rejects the WHOLE
-  // discovery payload when it meets one, so the vanes are simply not offered
-  // there (see src/capabilities.js).
-  if (!capabilities.swing) {
-    return device;
+  if (getSetting(unit, 'SetFanSpeed') !== undefined) {
+    device.features.push({
+      name: 'Fan speed',
+      external_id: ids.feature(FEATURE.FAN_SPEED),
+      category: DEVICE_FEATURE_CATEGORIES.AIR_CONDITIONING,
+      type: FAN_SPEED_FEATURE_TYPE,
+      min: AC_FAN_SPEED.AUTO,
+      max: AC_FAN_SPEED.HIGH,
+      read_only: false,
+      has_feedback: true,
+      keep_history: true,
+      supported_options: buildFanSpeedOptions(unit),
+    });
   }
 
   // Vanes are optional hardware: only the units that actually report a vane
@@ -373,11 +463,11 @@ export function buildDevice(gladys, unit, capabilities = DEFAULT_CAPABILITIES) {
       category: DEVICE_FEATURE_CATEGORIES.AIR_CONDITIONING,
       type: SWING_FEATURE_TYPE.VERTICAL,
       min: AC_SWING_VERTICAL.OFF,
-      max: AC_SWING_VERTICAL.POSITION_5,
+      max: AC_SWING_VERTICAL.AUTO,
       read_only: false,
       has_feedback: true,
       keep_history: true,
-      supported_options: buildSwingOptions(SWING_VERTICAL_LABELS),
+      supported_options: buildSwingOptions(SWING_VERTICAL_LABELS, AC_SWING_VERTICAL.AUTO),
     });
   }
 
@@ -388,11 +478,11 @@ export function buildDevice(gladys, unit, capabilities = DEFAULT_CAPABILITIES) {
       category: DEVICE_FEATURE_CATEGORIES.AIR_CONDITIONING,
       type: SWING_FEATURE_TYPE.HORIZONTAL,
       min: AC_SWING_HORIZONTAL.OFF,
-      max: AC_SWING_HORIZONTAL.POSITION_5,
+      max: AC_SWING_HORIZONTAL.AUTO,
       read_only: false,
       has_feedback: true,
       keep_history: true,
-      supported_options: buildSwingOptions(SWING_HORIZONTAL_LABELS),
+      supported_options: buildSwingOptions(SWING_HORIZONTAL_LABELS, AC_SWING_HORIZONTAL.AUTO),
     });
   }
 
@@ -429,9 +519,18 @@ export function readStates(gladys, unit) {
     });
   }
 
+  const fanSpeed =
+    FAN_SPEED_TO_GLADYS[toEnumSetting(getSetting(unit, 'SetFanSpeed'), FAN_SPEED_BY_CODE)];
+  if (fanSpeed !== undefined) {
+    states.push({
+      device_feature_external_id: ids.feature(FEATURE.FAN_SPEED),
+      state: fanSpeed,
+    });
+  }
+
   const swingVertical =
     SWING_VERTICAL_TO_GLADYS[
-      toVaneDirection(getSetting(unit, 'VaneVerticalDirection'), VANE_VERTICAL_BY_CODE)
+      toEnumSetting(getSetting(unit, 'VaneVerticalDirection'), VANE_VERTICAL_BY_CODE)
     ];
   if (swingVertical !== undefined) {
     states.push({
@@ -442,7 +541,7 @@ export function readStates(gladys, unit) {
 
   const swingHorizontal =
     SWING_HORIZONTAL_TO_GLADYS[
-      toVaneDirection(getSetting(unit, 'VaneHorizontalDirection'), VANE_HORIZONTAL_BY_CODE)
+      toEnumSetting(getSetting(unit, 'VaneHorizontalDirection'), VANE_HORIZONTAL_BY_CODE)
     ];
   if (swingHorizontal !== undefined) {
     states.push({
@@ -464,13 +563,13 @@ export function buildFullPayload(unit) {
     power: getSetting(unit, 'Power') === 'True',
     operationMode: getSetting(unit, 'OperationMode'),
     setTemperature: toNumber(getSetting(unit, 'SetTemperature')),
-    setFanSpeed: getSetting(unit, 'SetFanSpeed'),
+    setFanSpeed: toEnumSetting(getSetting(unit, 'SetFanSpeed'), FAN_SPEED_BY_CODE) ?? null,
     // Normalized: a unit reporting the integer code must not have it echoed
     // back as a code in a body the API reads as direction strings.
     vaneVerticalDirection:
-      toVaneDirection(getSetting(unit, 'VaneVerticalDirection'), VANE_VERTICAL_BY_CODE) ?? null,
+      toEnumSetting(getSetting(unit, 'VaneVerticalDirection'), VANE_VERTICAL_BY_CODE) ?? null,
     vaneHorizontalDirection:
-      toVaneDirection(getSetting(unit, 'VaneHorizontalDirection'), VANE_HORIZONTAL_BY_CODE) ?? null,
+      toEnumSetting(getSetting(unit, 'VaneHorizontalDirection'), VANE_HORIZONTAL_BY_CODE) ?? null,
     temperatureIncrementOverride: null,
     inStandbyMode: getSetting(unit, 'InStandbyMode') === 'True',
   };
@@ -494,6 +593,9 @@ export function buildSetPayload(gladys, unit, featureExternalId, value) {
     overlay = { operationMode: MODE_TO_MELCLOUD[value] };
   } else if (featureExternalId === ids.feature(FEATURE.TEMPERATURE)) {
     overlay = { setTemperature: value };
+  } else if (featureExternalId === ids.feature(FEATURE.FAN_SPEED)) {
+    const speed = FAN_SPEED_TO_MELCLOUD[value];
+    overlay = speed ? { setFanSpeed: speed } : null;
   } else if (featureExternalId === ids.feature(FEATURE.SWING_VERTICAL)) {
     const direction = SWING_VERTICAL_TO_MELCLOUD[value];
     overlay = direction ? { vaneVerticalDirection: direction } : null;

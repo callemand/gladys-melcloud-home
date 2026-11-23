@@ -29,10 +29,9 @@ already listed in the Discovery screen — run a scan to refresh the list.
 
 - **Air-to-air units (air conditioners)** expose **Power**, **Mode** (heat /
   cool / dry / fan / auto), **Target temperature** and a read-only **Room
-  temperature**. Units fitted with vanes also get **Vertical swing** and
-  **Horizontal swing** (Gladys 4.84.2+ only — older versions do not know these
-  controls, so they are not published there). Gladys names the "automatic" vane
-  position "off"; it is the automatic position of your unit.
+  temperature**, plus a **Fan speed** (auto, or only the speeds the unit
+  actually has). Units fitted with vanes also get **Vertical swing** and
+  **Horizontal swing** (auto, swing or a fixed position).
 - **Air-to-water units (Ecodan heat pumps)** expose **Power**, a **Zone 1
   temperature** setpoint and read-only **Zone 1 room temperature**, an
   **Outdoor temperature** sensor, and — when a hot water tank is present —

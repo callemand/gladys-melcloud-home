@@ -1,29 +1,12 @@
-// -----------------------------------------------------------------------------
-// Device type: AIR-TO-WATER unit (Ecodan heat pump: domestic hot water + heating).
+// AIR-TO-WATER unit (Ecodan heat pump: domestic hot water + heating).
 //
-// Maps a MELCloud Home air-to-water unit to a Gladys device. First-cut feature
-// set (deliberately the safe, verifiable subset):
-//   - power              (on/off)
-//   - forced hot water   (DHW boost on/off)
-//   - tank setpoint       (DHW target temperature)
-//   - tank temperature   (read-only)
-//   - zone-1 setpoint     (room target temperature)
-//   - zone-1 room temp   (read-only)
-//   - outdoor temperature (read-only, only when the sensor reports it)
+// Like air-to-air, state is a `settings: [{name, value}]` array of STRINGS.
+// Commands go to `PUT /monitor/atwunit/{id}` with EVERY control field present:
+// the changed one carries its value, the rest are `null` (the BFF rejects a
+// sparse patch).
 //
-// Like air-to-air, the state is a `settings: [{name, value}]` array of STRING
-// values ("True", "HeatRoomTemperature", "50"...). Confirmed against a real
-// /context fixture (erwindouna/aiomelcloudhome) and cross-checked with
-// andrew-blake/melcloudhome + OlivierZal/melcloud-api.
-//
-// Commands go to `PUT /monitor/atwunit/{id}` with a FULL camelCase body where
-// EVERY control field is present: the changed field carries its value, all the
-// others are sent as `null` (the BFF rejects a sparse patch).
-//
-// Deferred (needs a real device to verify): zone operation MODE. /context
-// reports it in PascalCase but the two reverse-engineering efforts disagree on
-// whether the PUT accepts PascalCase or camelCase, so it is not exposed yet.
-// -----------------------------------------------------------------------------
+// Zone operation MODE is deferred: the sources disagree on whether the PUT
+// takes PascalCase or camelCase, and it needs a real device to settle.
 
 import {
   DEVICE_FEATURE_CATEGORIES,
