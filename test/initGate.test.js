@@ -1,14 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { INIT_WAIT, createInitGate } from '../src/initGate.js';
+import { COMMAND_INIT_WAIT, INIT_WAIT, createInitGate } from '../src/initGate.js';
 
 // A gate on a fake timer: `expire()` fires the pending wait timeouts.
 const setup = () => {
   const timers = new Set();
   const gate = createInitGate({
-    setTimeoutImpl: (callback) => {
-      const timer = { callback };
+    setTimeoutImpl: (callback, delay) => {
+      const timer = { callback, delay };
       timers.add(timer);
       return timer;
     },
@@ -128,4 +128,23 @@ test('a settled wait clears its timer', async () => {
   await run;
   assert.equal(await waiting, true);
   assert.equal(timers.size, 0);
+});
+
+test('a command waits less, to answer before the core gives up on it after 5 s', async () => {
+  assert.ok(COMMAND_INIT_WAIT <= 2000);
+  const { gate, timers, expire } = setup();
+  gate.run(() => new Promise(() => {}));
+  const waiting = gate.wait({ timeout: COMMAND_INIT_WAIT });
+  assert.deepEqual(
+    [...timers].map((timer) => timer.delay),
+    [COMMAND_INIT_WAIT],
+  );
+  expire();
+  assert.equal(await waiting, false);
+  // Without a bound of its own, a request waits the default one.
+  gate.wait();
+  assert.deepEqual(
+    [...timers].map((timer) => timer.delay),
+    [INIT_WAIT],
+  );
 });

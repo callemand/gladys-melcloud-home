@@ -11,6 +11,11 @@
 
 export const INIT_WAIT = 10000;
 
+// A device command has less: the core gives up on it after 5 s, and a command
+// still waiting then would be reported as failed and run anyway. 2 s leaves
+// the MELCloud request the rest.
+export const COMMAND_INIT_WAIT = 2000;
+
 /**
  * Build the gate between the initializations and the requests.
  * @param {object} [options] - Options.
@@ -58,9 +63,11 @@ export function createInitGate({
 
     /**
      * Wait until an initialization has run and none is in progress.
+     * @param {object} [options] - Options.
+     * @param {number} [options.timeout] - Longest wait for this call, in ms.
      * @returns {Promise<boolean>} True when settled, false when the wait timed out.
      */
-    wait() {
+    wait({ timeout: waitTimeout = timeout } = {}) {
       if (isSettled()) {
         return Promise.resolve(true);
       }
@@ -72,7 +79,7 @@ export function createInitGate({
         const timer = setTimeoutImpl(() => {
           waiters = waiters.filter((waiter) => waiter !== release);
           resolve(false);
-        }, timeout);
+        }, waitTimeout);
         // A pending wait must not keep the process alive on shutdown.
         if (timer && typeof timer.unref === 'function') {
           timer.unref();

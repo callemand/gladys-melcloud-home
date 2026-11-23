@@ -21,7 +21,7 @@ import { normalizeConfig } from './src/config.js';
 import { MELCloudHomeApi } from './src/melcloud-home-api.js';
 import { createDeviceRegistry } from './src/devices/index.js';
 import { createRealtimeClient } from './src/realtime.js';
-import { createInitGate } from './src/initGate.js';
+import { COMMAND_INIT_WAIT, createInitGate } from './src/initGate.js';
 import { createPendingStates } from './src/pendingStates.js';
 import { createWidgetRefresher } from './src/widgetRefresh.js';
 import {
@@ -215,10 +215,13 @@ gladys.onScanRequest(async () => {
 
 // --- Command -----------------------------------------------------------------
 gladys.onSetValue(async (device, feature, value) => {
-  await initGate.wait();
+  // Only while the client is being built, and briefly: see COMMAND_INIT_WAIT.
+  if (!api) {
+    await initGate.wait({ timeout: COMMAND_INIT_WAIT });
+  }
   if (!api) {
     // Throw: the SDK sends a success:false acknowledgement to Gladys.
-    throw new Error('MELCloud Home is not configured');
+    throw new Error(`MELCloud Home is not available (${apiProblem || 'notConfigured'})`);
   }
   const reported = await registry.setValue(api, device, feature, value);
   rememberCommands(reported, [{ featureExternalId: feature.external_id, value }]);
