@@ -213,8 +213,8 @@ test('the Settings form leaves a field empty when the state is unknown', () => {
 test('the power button sends the declared value', () => {
   const { changes, message } = plan(buildUnit(), ACTION.POWER, { value: 0 });
   assert.deepEqual(changes, [{ featureExternalId: id('power'), value: 0 }]);
-  assert.equal(message.fr, 'Éteinte');
-  assert.equal(plan(buildUnit(), ACTION.POWER, { value: 1 }).message.fr, 'Allumée');
+  assert.equal(message.fr, "En cours d'extinction");
+  assert.equal(plan(buildUnit(), ACTION.POWER, { value: 1 }).message.fr, 'En cours de démarrage');
 });
 
 test('the setpoint buttons move from the current setpoint, within the mode bounds', () => {

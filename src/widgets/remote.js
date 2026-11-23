@@ -54,8 +54,8 @@ const LABELS = {
   turnOn: text('Turn on', 'Allumer', 'Einschalten', 'Encender'),
   turnOff: text('Turn off', 'Éteindre', 'Ausschalten', 'Apagar'),
   settings: text('Settings', 'Réglages', 'Einstellungen', 'Ajustes'),
-  turnedOn: text('Turned on', 'Allumée', 'Eingeschaltet', 'Encendida'),
-  turnedOff: text('Turned off', 'Éteinte', 'Ausgeschaltet', 'Apagada'),
+  turnedOn: text('Starting up', 'En cours de démarrage', 'Wird gestartet', 'Arrancando'),
+  turnedOff: text('Shutting down', "En cours d'extinction", 'Wird ausgeschaltet', 'Apagándose'),
   settingsSent: text(
     'Settings sent',
     'Réglages envoyés',
