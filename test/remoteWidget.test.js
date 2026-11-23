@@ -5,7 +5,12 @@ import { readFileSync } from 'node:fs';
 import { validateWidgetContent } from '@gladysassistant/integration-sdk';
 
 import { createFakeGladys } from './helpers/fakeGladys.js';
-import { AC_MODE, AC_FAN_SPEED, AC_SWING_VERTICAL } from '../src/devices/airToAir.js';
+import {
+  AC_MODE,
+  AC_FAN_SPEED,
+  AC_SWING_VERTICAL,
+  getTemperatureStep,
+} from '../src/devices/airToAir.js';
 import {
   ACTION,
   CHART,
@@ -13,7 +18,6 @@ import {
   buildRemoteMessageContent,
   planRemoteAction,
   roomTemperatureName,
-  temperatureStep,
 } from '../src/widgets/remote.js';
 import { createPendingStates } from '../src/pendingStates.js';
 
@@ -188,7 +192,7 @@ test('the setpoint buttons step by one degree, or half a degree when the unit ca
   assert.equal(button(half, ACTION.TEMP_DOWN).label.fr, '−0,5 °C');
   assert.equal(button(half, ACTION.TEMP_UP).label.en, '+0.5 °C');
   assert.deepEqual(button(half, ACTION.TEMP_UP).action.params, { delta: 0.5 });
-  assert.equal(temperatureStep(buildUnit()), 1);
+  assert.equal(getTemperatureStep(buildUnit()), 1);
 });
 
 test('the Settings form offers what the unit has, pre-filled with its state', () => {

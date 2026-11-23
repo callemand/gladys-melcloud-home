@@ -384,7 +384,7 @@ function getTemperatureBounds(unit) {
  * @param {object} unit - Air-to-air unit.
  * @returns {number} 0.5 or 1.
  */
-function getTemperatureStep(unit) {
+export function getTemperatureStep(unit) {
   return (unit.capabilities || {}).hasHalfDegreeIncrements === true ? 0.5 : 1;
 }
 

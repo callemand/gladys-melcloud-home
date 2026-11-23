@@ -15,6 +15,7 @@ import {
   FEATURE,
   buildDevice,
   getModeTemperatureBounds,
+  getTemperatureStep,
   readStates,
 } from '../devices/airToAir.js';
 
@@ -231,15 +232,6 @@ export function buildRemoteMessageContent(reason) {
 }
 
 /**
- * Setpoint step of the unit: half a degree when it supports it.
- * @param {object} unit - Air-to-air unit.
- * @returns {number} The step in °C.
- */
-export function temperatureStep(unit) {
-  return (unit.capabilities || {}).hasHalfDegreeIncrements ? 0.5 : 1;
-}
-
-/**
  * A temperature in every language: a decimal point in English, a comma elsewhere.
  * @param {string} prefix - Text before the number, per language.
  * @param {number} value - The temperature in °C.
@@ -391,7 +383,7 @@ export function buildRemoteContent(gladys, unit, { settings = {}, pending, roomN
     ],
   });
 
-  const step = temperatureStep(unit);
+  const step = getTemperatureStep(unit);
   components.push(
     {
       type: 'button',
@@ -457,7 +449,7 @@ export function planRemoteAction(gladys, unit, actionKey, params = {}, { values,
     if (typeof current !== 'number' || !Number.isFinite(delta) || delta === 0) {
       throw new Error('The setpoint of this heat pump is unknown');
     }
-    const step = temperatureStep(unit);
+    const step = getTemperatureStep(unit);
     const { min, max } = getModeTemperatureBounds(unit, states.get(ids.feature(FEATURE.MODE)));
     const value = Math.min(max, Math.max(min, roundToStep(current + delta, step)));
     return {
