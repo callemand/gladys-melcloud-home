@@ -22,6 +22,7 @@ import { MELCloudHomeApi } from './src/melcloud-home-api.js';
 import { createDeviceRegistry } from './src/devices/index.js';
 import { createRealtimeClient } from './src/realtime.js';
 import { createPendingStates } from './src/pendingStates.js';
+import { createWidgetRefresher } from './src/widgetRefresh.js';
 import {
   REMOTE_WIDGET_KEY,
   buildRemoteContent,
@@ -163,14 +164,20 @@ async function refreshAllStates() {
   refreshWidgets();
 }
 
+// The core drops a widget refresh sent less than 10 s after the previous one:
+// the refresher postpones it instead (see src/widgetRefresh.js).
+const widgetRefresher = createWidgetRefresher({
+  request: () => gladys.requestWidgetRefresh(REMOTE_WIDGET_KEY),
+});
+
 /**
- * Ask Gladys to re-pull the remote control widgets: their status list is
- * computed here, unlike the temperature tiles that follow the device states.
- * Rate-limited by the core, and a no-op when no widget is open.
+ * Ask Gladys to re-pull the widgets: their status list is computed here,
+ * unlike the temperature tiles that follow the device states. A no-op when no
+ * widget is open.
  * @returns {void} Nothing.
  */
 function refreshWidgets() {
-  gladys.requestWidgetRefresh(REMOTE_WIDGET_KEY);
+  widgetRefresher.refresh();
 }
 
 const realtime = createRealtimeClient({
